@@ -1,0 +1,17 @@
+[project]
+name = "ggest-mcp"
+version = "0.1.0"
+description = "MCP server for gGest ERP — safe read-heavy access to the gGest REST API"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=3",
+    "httpx>=0.27",
+    "pydantic-settings>=2.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ggest_mcp"]

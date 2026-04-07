@@ -1,0 +1,2045 @@
+openapi: 3.0.3
+info:
+  title: gGest REST API
+  description: |
+    Documentação gerada a partir do código fonte do projeto gGestWeb.
+    Schemas extraídos diretamente dos DTOs C# da camada Application.
+    Base URL: /api/v1
+  version: 1.0.0
+
+servers:
+  - url: https://{host}/api/v1
+    variables:
+      host:
+        default: golfinhosoftware.pcscloud.net
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    # ── Auth ──────────────────────────────────────────────────────────────────
+    LoginRequest:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string, example: utilizador@empresa.pt }
+        password: { type: string, example: password123 }
+
+    LoginResponse:
+      type: object
+      properties:
+        access_token: { type: string, nullable: true }
+        refresh_token: { type: string, nullable: true }
+
+    RefreshTokenRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token: { type: string, example: 2606e385-f730-4e6c-a63d-1ec7f4a0637c }
+
+    # ── Base ──────────────────────────────────────────────────────────────────
+    # IdentityBase<string> → codigo: string + descricao: string
+    SimpleStringEntity:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string }
+        descricao: { type: string, nullable: true }
+
+    # ── Enums ─────────────────────────────────────────────────────────────────
+    TipoTaxa:
+      type: integer
+      description: |
+        0 = Erro, 1 = Normal, 2 = Intermédia, 3 = Reduzida, 4 = Isento,
+        5 = Outros, 6 = Não Sujeito
+      enum: [0, 1, 2, 3, 4, 5, 6]
+
+    ComponenteDto:
+      type: integer
+      description: |
+        1 = Simples, 2 = Composto, 3 = Conjunto, 4 = Associados,
+        5 = Menu, 6 = Prato do Dia, 7 = Contrato
+      enum: [1, 2, 3, 4, 5, 6, 7]
+
+    NaturezaDto:
+      type: integer
+      description: |
+        0 = Normal, 1 = Fitofármaco profissional, 2 = Fitofármaco não profissional,
+        4 = Cartão Oferta, 5 = Ecovalor, 6 = Dedução adiantamento, 8 = Pack
+      enum: [0, 1, 2, 4, 5, 6, 8]
+
+    ComissaoDto:
+      type: integer
+      description: "0 = Zero, 1 = Um, 2 = Dois, 3 = Três, 4 = Quatro"
+      enum: [0, 1, 2, 3, 4]
+
+    MargemLucroSobreDto:
+      type: integer
+      description: "1 = Bruto, 2 = Líquido"
+      enum: [1, 2]
+
+    PrecoMinimoTipo:
+      type: integer
+      description: |
+        0 = Sem limite, 1 = % sobre último preço compra bruto,
+        2 = % sobre PMC, 3 = % sobre último preço compra líquido,
+        4 = Preço mínimo sem IVA, 5 = Menor preço venda artigo,
+        6 = % sobre último preço compra bruto (ficha artigo),
+        7 = % sobre último preço compra líquido (ficha artigo)
+      enum: [0, 1, 2, 3, 4, 5, 6, 7]
+
+    LimitePrecoTipo:
+      type: integer
+      description: |
+        0 = Não, 1 = Dias após última data de compra,
+        2 = Dias após última data de alteração de preços, 3 = Data a indicar
+      enum: [0, 1, 2, 3]
+
+    ZonaRegiaoDto:
+      type: integer
+      description: |
+        1 = Continente, 2 = Açores, 3 = Madeira,
+        4 = País da Comunidade Europeia, 5 = Outros
+      enum: [1, 2, 3, 4, 5]
+
+    CobrancaCredito:
+      type: integer
+      description: "0 = Normal, 1 = Em dificuldade, 2 = Incobrável"
+      enum: [0, 1, 2]
+
+    EcoValor:
+      type: integer
+      description: |
+        0 = Processar (valor não incluído no preço),
+        1 = Processar (valor incluído no preço), 2 = Não processar
+      enum: [0, 1, 2]
+
+    EnvioFaturacaoEletronica:
+      type: integer
+      description: |
+        0 = Não, 1 = CIUS-PT via API (SAPHETY),
+        2 = PDF assinado email (SAPHETY), 3 = CIUS-PT via API (FE-AP/ESPAP),
+        4 = Assinar PDF (SAPHETY), 5 = PDF assinado email (MULTICERT),
+        6 = Assinar PDF (MULTICERT), 7 = CIUS-PT via API (ilink)
+      enum: [0, 1, 2, 3, 4, 5, 6, 7]
+
+    OneStopShop:
+      type: integer
+      description: "0 = Não, 1 = Sim, 2 = Perguntar ao faturar"
+      enum: [0, 1, 2]
+
+    MovimentaContaCorrente:
+      type: integer
+      description: "Movimento de conta corrente"
+
+    SeriesTipo:
+      type: integer
+      description: |
+        1 = Documentos a emitir neste programa,
+        2 = Reposição de documentos emitidos, 3 = Integração MobiVendas,
+        4 = Integração livros manuais, 5 = Documentos externos,
+        6 = Auto-faturação (fornecedor), 7 = Auto-faturação (clientes)
+      enum: [1, 2, 3, 4, 5, 6, 7]
+
+    TipoAt:
+      type: string
+      description: |
+        "" = Não definido, M = Mercadorias, P = Matérias-primas,
+        A = Produtos acabados, S = Subprodutos, T = Produtos em curso,
+        B = Ativos biológicos, E = Impostos especiais, I = Taxas parafiscais,
+        O = Outros
+      enum: ["", M, P, A, S, T, B, E, I, O]
+
+    CaixaEstado:
+      type: integer
+      description: "0 = Fechada, 1 = Aberta"
+      enum: [0, 1]
+
+    PrecoEnum:
+      type: integer
+      description: "1 = Preço1, 2 = Preço2, 3 = Preço3, 4 = Preço4, 5 = Definido pelo cliente"
+      enum: [1, 2, 3, 4, 5]
+
+    FormulaTipo:
+      type: integer
+      description: "0 = Genérica, 1 = Pesagem de viaturas"
+      enum: [0, 1]
+
+    # ── Sub-schemas ───────────────────────────────────────────────────────────
+    DescontosDto:
+      type: object
+      properties:
+        desconto1: { type: number, format: decimal, example: 0 }
+        desconto2: { type: number, format: decimal, example: 0 }
+        desconto3: { type: number, format: decimal, example: 0 }
+        desconto4: { type: number, format: decimal, example: 0 }
+        desconto5: { type: number, format: decimal, example: 0 }
+        desconto6: { type: number, format: decimal, example: 0 }
+        desconto7: { type: number, format: decimal, example: 0 }
+        desconto8: { type: number, format: decimal, example: 0 }
+
+    DimensoesDto:
+      type: object
+      properties:
+        volume: { type: number, format: decimal, nullable: true }
+        peso_bruto: { type: number, format: decimal, nullable: true, example: 1.2 }
+        peso_liquido: { type: number, format: decimal, nullable: true, example: 1.0 }
+        unidade_volume: { type: string, nullable: true, example: "" }
+        comprimento: { type: number, format: decimal, nullable: true }
+        largura: { type: number, format: decimal, nullable: true }
+        altura: { type: number, format: decimal, nullable: true }
+
+    FormulaValoresDto:
+      type: object
+      properties:
+        valor_volume: { type: number, format: decimal, nullable: true }
+        valor_x: { type: number, format: decimal, nullable: true }
+        valor_y: { type: number, format: decimal, nullable: true }
+        valor_z: { type: number, format: decimal, nullable: true }
+
+    DocumentoDetalhes:
+      type: object
+      properties:
+        documento_codigo: { type: string, nullable: true, example: FT }
+        serie_codigo: { type: string, nullable: true, example: F2026 }
+        numero_documento: { type: integer, example: 0 }
+        data: { type: string, format: date, nullable: true }
+        ano: { type: integer, example: 0 }
+        entidade_codigo: { type: integer, example: 0 }
+        entidade_descricao: { type: string, nullable: true }
+        preco_bruto: { type: number, format: decimal, example: 0 }
+        preco_liquido: { type: number, format: decimal, example: 0 }
+
+    MargemLucroDetalhes:
+      type: object
+      properties:
+        margem_lucro1: { type: number, format: decimal, example: 0 }
+        margem_lucro2: { type: number, format: decimal, example: 0 }
+        margem_lucro3: { type: number, format: decimal, example: 0 }
+        margem_lucro4: { type: number, format: decimal, example: 0 }
+        margem_lucro_sobre_preco:
+          $ref: '#/components/schemas/MargemLucroSobreDto'
+        excluir_mapas_lucro: { type: boolean, example: false }
+        pvp_minimo_tipo:
+          $ref: '#/components/schemas/PrecoMinimoTipo'
+        pvp_minimo_valor: { type: number, format: decimal, example: 0 }
+        limite_preco:
+          $ref: '#/components/schemas/LimitePrecoTipo'
+        limite_preco_dias: { type: integer, example: 0 }
+        limite_preco_data: { type: string, format: date, nullable: true }
+
+    FinanceiroDetalhesDto:
+      type: object
+      properties:
+        ultima_compra:
+          $ref: '#/components/schemas/DocumentoDetalhes'
+        ultima_venda:
+          $ref: '#/components/schemas/DocumentoDetalhes'
+        margem_lucro:
+          $ref: '#/components/schemas/MargemLucroDetalhes'
+
+    # ── Feature DTOs ──────────────────────────────────────────────────────────
+    AreaNegocioDto:
+      description: "IdentityBase<string> — apenas codigo + descricao"
+      allOf:
+        - $ref: '#/components/schemas/SimpleStringEntity'
+
+    ArmazemDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: ARM01 }
+        descricao: { type: string, nullable: true, example: Armazém Principal }
+        inativo: { type: boolean, example: false }
+        conta_ctb: { type: string, nullable: true, example: "3110001", description: Conta contabilidade }
+        morada: { type: string, nullable: true }
+        morada2: { type: string, nullable: true }
+        cod_postal: { type: string, nullable: true, example: 4000-001 Porto }
+        pais: { type: string, nullable: true, example: PT, description: Código do país }
+        serie: { type: string, nullable: true, example: F2026, description: Série de faturação }
+
+    ArtigoDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: ART001 }
+        descricao: { type: string, nullable: true, example: Produto Exemplo }
+        codigo_barras: { type: string, nullable: true, example: "5601234567890" }
+        descricao_extensa: { type: string, nullable: true }
+        descricao_abreviada: { type: string, nullable: true, example: Prod. Ex. }
+        observacao: { type: string, nullable: true }
+        mostrar_observacao: { type: boolean, example: false }
+        referencia: { type: string, nullable: true, example: REF-2026 }
+        link_web1: { type: string, nullable: true }
+        link_web2: { type: string, nullable: true }
+        preco1: { type: number, format: decimal, example: 10.00 }
+        preco2: { type: number, format: decimal, example: 9.50 }
+        preco3: { type: number, format: decimal, example: 9.00 }
+        preco4: { type: number, format: decimal, example: 8.50 }
+        precos_com_iva: { type: boolean, example: true }
+        iva_venda1_codigo: { type: integer, nullable: true, example: 23 }
+        iva_venda1_taxa: { type: number, format: decimal, example: 23.00 }
+        iva_venda2_codigo: { type: integer, nullable: true, example: 23 }
+        iva_venda2_taxa: { type: number, format: decimal, example: 23.00 }
+        iva_compra_codigo: { type: integer, nullable: true, example: 23 }
+        iva_compra_taxa: { type: number, format: decimal, example: 23.00 }
+        descontos:
+          $ref: '#/components/schemas/DescontosDto'
+        unidade_principal: { type: string, nullable: true, example: UN }
+        marca: { type: string, nullable: true, example: "" }
+        grupo: { type: string, nullable: true, example: GER }
+        familia: { type: string, nullable: true, example: "" }
+        subfamilia: { type: string, nullable: true, example: "" }
+        tipo: { type: string, nullable: true, example: "" }
+        componente:
+          $ref: '#/components/schemas/ComponenteDto'
+        natureza:
+          $ref: '#/components/schemas/NaturezaDto'
+        comissao:
+          $ref: '#/components/schemas/ComissaoDto'
+        quantidade_por_defeito: { type: number, format: decimal, nullable: true, example: 1 }
+        cartao_oferta: { type: string, nullable: true, example: "" }
+        fitofarmaco: { type: string, nullable: true, example: "" }
+        formula: { type: string, nullable: true, example: "" }
+        aplica_resultado_formula_quantidade: { type: boolean, example: false }
+        formula_valores:
+          $ref: '#/components/schemas/FormulaValoresDto'
+        dimensoes:
+          $ref: '#/components/schemas/DimensoesDto'
+        financeiro:
+          $ref: '#/components/schemas/FinanceiroDetalhesDto'
+        fornecedor_principal: { type: integer, nullable: true, example: null }
+        movimenta_stock: { type: boolean, example: true }
+        inativo: { type: boolean, example: false }
+        lancar_por_valor: { type: boolean, example: false }
+        pedir_preco: { type: boolean, example: false }
+        pedir_quantidade: { type: boolean, example: false }
+        imprime_etiquetas: { type: boolean, example: false }
+        enviar_para_touch: { type: boolean, example: true }
+        mov_quant_inteiras: { type: boolean, example: false }
+
+    ClienteDto:
+      type: object
+      required: [descricao]
+      properties:
+        codigo: { type: integer, format: int64, example: 0, description: "0 para criar novo" }
+        descricao: { type: string, nullable: true, example: Cliente Exemplo Lda }
+        descricao2: { type: string, nullable: true, example: "" }
+        morada: { type: string, nullable: true, example: "Rua Principal, 100" }
+        morada2: { type: string, nullable: true, example: "" }
+        codpostal: { type: string, nullable: true, example: "4000-001 Porto" }
+        contribuinte: { type: string, nullable: true, example: "123456789" }
+        pais: { type: string, nullable: true, example: PT }
+        prefixo: { type: string, nullable: true, example: PT }
+        telefone1: { type: string, nullable: true, example: "220000001" }
+        telefone2: { type: string, nullable: true }
+        telefone3: { type: string, nullable: true }
+        telefone4: { type: string, nullable: true }
+        telemovel1: { type: string, nullable: true, example: "910000001" }
+        telemovel2: { type: string, nullable: true }
+        telemovel3: { type: string, nullable: true }
+        telemovel4: { type: string, nullable: true }
+        email1: { type: string, nullable: true, example: geral@clienteexemplo.pt }
+        email2: { type: string, nullable: true }
+        email3: { type: string, nullable: true }
+        email4: { type: string, nullable: true }
+        fax: { type: string, nullable: true }
+        web: { type: string, nullable: true, example: https://www.clienteexemplo.pt }
+        espaco_fiscal: { type: string, nullable: true, example: PTC }
+        preco: { type: integer, example: 1, description: "Tabela de preço a aplicar (1-4)" }
+        desct_art: { type: integer, example: 0, description: "Desconto do artigo a aplicar" }
+        iva_isencao: { type: integer, example: 0 }
+        prazo_pagamento: { type: string, nullable: true, example: 30D }
+        expedicao: { type: string, nullable: true, example: DHL }
+        vendedor: { type: integer, example: 1 }
+        vendedor_fixo: { type: boolean, example: false }
+        inativo: { type: boolean, example: false }
+        sujeito_passivo: { type: boolean, example: true }
+        moeda: { type: string, nullable: true, example: EUR }
+        limitecredito: { type: number, format: decimal, example: 5000.00 }
+        avisospagamento: { type: boolean, example: true }
+        obs: { type: string, nullable: true, example: "" }
+        obs_alerta: { type: boolean, example: false }
+        conta_ctb: { type: string, nullable: true, example: "211000" }
+        aplicador_numero: { type: string, nullable: true }
+        retencao: { type: boolean, example: false }
+        retencao_taxa: { type: number, format: decimal, example: 0 }
+        latitude: { type: number, format: decimal, example: 0 }
+        longitude: { type: number, format: decimal, example: 0 }
+        grupo: { type: string, nullable: true }
+        zona: { type: string, nullable: true }
+        rota: { type: string, nullable: true }
+        docs_bloqueados: { type: string, nullable: true, description: "Códigos separados por ; ex: ;FT;NC;" }
+        difi_cobranca:
+          $ref: '#/components/schemas/CobrancaCredito'
+        area_negocio: { type: string, nullable: true }
+        ecovalor:
+          $ref: '#/components/schemas/EcoValor'
+        idioma: { type: string, nullable: true, example: PT }
+        resumo_faturas: { type: boolean, example: false }
+        administracao_publica: { type: integer, example: 0 }
+        enviar_faturacao_eletronica:
+          $ref: '#/components/schemas/EnvioFaturacaoEletronica'
+        mail_faturacao_eletronica: { type: string, nullable: true }
+        balcao_unico_oss:
+          $ref: '#/components/schemas/OneStopShop'
+        gln: { type: string, nullable: true, example: "5601234567890" }
+        limite_vencimento: { type: integer, example: 0 }
+        limite_emitido: { type: integer, example: 0 }
+        numero_autorizacao_debito_direto: { type: string, nullable: true }
+        data_autorizacao_debito_direto: { type: string, format: date, nullable: true }
+        bi: { type: string, nullable: true, description: "Bilhete identidade / Cartão Cidadão" }
+        bi_validade: { type: string, format: date, nullable: true }
+        seg_social: { type: string, nullable: true }
+        utente_saude: { type: string, nullable: true }
+        data_nascimento: { type: string, format: date, nullable: true }
+        sexo: { type: string, nullable: true, enum: [M, F, ""] }
+
+    DocumentoDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: FT }
+        descricao: { type: string, nullable: true, example: Fatura }
+        tipo: { type: string, nullable: true, example: FT }
+        tipo_movimento_conta_corrente:
+          $ref: '#/components/schemas/MovimentaContaCorrente'
+        invoice_type: { type: string, nullable: true, example: FT, description: "Tipo AT (FT, FS, NC, ND, FR, RC, GR, GT, GA, GC, CM, CO, GD, PF, TV, TD, AA, DA)" }
+        iva_incluido: { type: boolean, example: false }
+        variavel_stock: { type: string, nullable: true, example: S }
+        sinal_stock: { type: string, nullable: true, example: "-" }
+        atualiza_pmc: { type: boolean, example: true }
+        atualiza_ultimo_preco: { type: boolean, example: false }
+
+    ExpedicaoDto:
+      description: "IdentityBase<string> — apenas codigo + descricao"
+      allOf:
+        - $ref: '#/components/schemas/SimpleStringEntity'
+
+    FamiliaDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: F01 }
+        descricao: { type: string, nullable: true, example: Família 1 }
+        grupo: { type: string, nullable: true, example: G01, description: Código do grupo pai }
+
+    FormulaDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: F01 }
+        descricao: { type: string, nullable: true, example: Comprimento x Largura }
+        variaveis: { type: integer, example: 2, description: "Nº de variáveis usadas (0-4)" }
+        var_vol: { type: string, nullable: true, description: Label da variável volume }
+        var_vol_casas_inteiras: { type: integer, example: 0 }
+        var_vol_casas_decimais: { type: integer, example: 2 }
+        varx: { type: string, nullable: true, example: Comprimento }
+        varx_casas_inteiras: { type: integer, example: 2 }
+        varx_casas_decimais: { type: integer, example: 2 }
+        vary: { type: string, nullable: true, example: Largura }
+        vary_casas_inteiras: { type: integer, example: 2 }
+        vary_casas_decimais: { type: integer, example: 2 }
+        varz: { type: string, nullable: true }
+        varz_casas_inteiras: { type: integer, example: 0 }
+        varz_casas_decimais: { type: integer, example: 0 }
+        valor_vol: { type: number, format: decimal, example: 0 }
+        valorx: { type: number, format: decimal, example: 0 }
+        valory: { type: number, format: decimal, example: 0 }
+        valorz: { type: number, format: decimal, example: 0 }
+        formula: { type: string, nullable: true, example: "X * Y" }
+        um_se_zero: { type: boolean, example: false, description: "Retornar 1 se resultado for 0" }
+        tipo:
+          $ref: '#/components/schemas/FormulaTipo'
+
+    GrupoDto:
+      description: "IdentityBase<string> — apenas codigo + descricao"
+      allOf:
+        - $ref: '#/components/schemas/SimpleStringEntity'
+
+    GrupoEntidadeDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: GE01 }
+        descricao: { type: string, nullable: true, example: Grupo Entidade 1 }
+        tabela_precos: { type: boolean, example: false }
+        tabela_descontos: { type: boolean, example: false }
+
+    IdiomaDto:
+      description: "IdentityBase<string> — apenas codigo + descricao"
+      allOf:
+        - $ref: '#/components/schemas/SimpleStringEntity'
+
+    IsencaoIvaDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: M40 }
+        descricao: { type: string, nullable: true, example: "Isento artigo 9.º do CIVA" }
+        norma: { type: string, nullable: true, example: "Artigo 9.º do CIVA" }
+
+    IvaDto:
+      type: object
+      required: [codigo, taxa, tipo_taxa]
+      properties:
+        codigo: { type: integer, example: 23 }
+        descricao: { type: string, nullable: true, example: IVA Normal Continental }
+        taxa: { type: number, format: decimal, example: 23.00 }
+        tipo_taxa:
+          $ref: '#/components/schemas/TipoTaxa'
+        regime: { type: string, nullable: true, example: NOR, description: Código do regime IVA }
+        espaco_fiscal: { type: string, nullable: true, example: PTC, description: "PTC = Portugal Continental, PTA = Açores, PTM = Madeira" }
+        ise_codigo: { type: string, nullable: true, example: "" }
+        ise_descricao: { type: string, nullable: true }
+        ise_descricao_doc: { type: string, nullable: true }
+        ise_norma: { type: string, nullable: true }
+        inativo: { type: boolean, example: false }
+        inicio: { type: string, format: date, nullable: true }
+        fim: { type: string, format: date, nullable: true }
+        conta_ctb: { type: string, nullable: true }
+
+    MarcaDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: SAMSUNG }
+        descricao: { type: string, nullable: true, example: Samsung }
+        referencia: { type: string, example: SAM }
+        dias_reposicao: { type: integer, example: 7 }
+        dias_vendas_analisar: { type: integer, example: 30 }
+
+    MoedaDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: EUR }
+        descricao: { type: string, nullable: true, example: Euro }
+        cambio_compra: { type: number, format: float, example: 1.0 }
+        cambio_venda: { type: number, format: float, example: 1.0 }
+        cambio_data: { type: string, format: date, nullable: true, example: "2026-01-01" }
+        arredondamento_iva: { type: integer, example: 2, description: "Nº casas decimais para IVA" }
+        arredondamento_valor: { type: integer, example: 2, description: "Nº casas decimais para valores" }
+        extenso_inteiro: { type: string, nullable: true, example: euro }
+        extenso_decimal: { type: string, nullable: true, example: cêntimo }
+
+    PaisDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: PT }
+        descricao: { type: string, nullable: true, example: Portugal }
+        prefixo: { type: string, nullable: true, example: PT }
+        zona:
+          $ref: '#/components/schemas/ZonaRegiaoDto'
+        conta_ctb_i: { type: string, nullable: true, description: "Conta contabilidade intracomunitário" }
+        conta_ctb_m: { type: string, nullable: true, description: "Conta contabilidade extracomunitário" }
+
+    PostoDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: integer, example: 1 }
+        descricao: { type: string, nullable: true, example: Posto 1 }
+        armazem: { type: string, nullable: true, example: ARM01 }
+        serie_defa: { type: string, nullable: true, example: F2026, description: Série por defeito }
+        estabelecimento: { type: integer, example: 1 }
+        cx_estado:
+          $ref: '#/components/schemas/CaixaEstado'
+        cx_sessao: { type: integer, example: 0, description: Número de sessão do caixa }
+        preco:
+          $ref: '#/components/schemas/PrecoEnum'
+        fundo_maneio: { type: number, format: decimal, example: 0.00 }
+
+    PrazoPagamentoDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: 30D }
+        descricao: { type: string, nullable: true, example: 30 Dias }
+        prazo: { type: integer, example: 30, description: Prazo em número de dias }
+        conta_ctb: { type: string, nullable: true }
+        docs_bloqueados: { type: string, nullable: true, description: "Lista de códigos de documentos bloqueados" }
+
+    PrefixoPaisDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: PT }
+        descricao: { type: string, nullable: true, example: Portugal }
+        alfa2: { type: string, nullable: true, example: PT, description: "ISO 3166-1 alfa-2" }
+        alfa3: { type: string, nullable: true, example: PRT, description: "ISO 3166-1 alfa-3" }
+
+    RegimeIvaDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: NOR }
+        descricao: { type: string, nullable: true, example: Regime Normal }
+        valor_deducao: { type: number, format: float, example: 100.0, description: "Percentagem de dedução (0-100)" }
+        bens_usados: { type: boolean, example: false }
+        iva_custo: { type: integer, example: 0 }
+
+    SerieDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: F2026 }
+        descricao: { type: string, nullable: true, example: Série Faturação 2026 }
+        inativa: { type: boolean, example: false }
+        tipo:
+          $ref: '#/components/schemas/SeriesTipo'
+        ano: { type: integer, example: 2026 }
+        data_fim: { type: string, format: date, nullable: true }
+
+    SubfamiliaDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: SF01 }
+        descricao: { type: string, nullable: true, example: Subfamília 1 }
+        grupo: { type: string, nullable: true, example: G01, description: Código do grupo pai }
+        familia: { type: string, nullable: true, example: F01, description: Código da família pai }
+
+    TextoDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: TXT01 }
+        descricao: { type: string, nullable: true, example: Texto Padrão Fatura }
+        texto: { type: string, nullable: true, example: "Obrigado pela sua preferência." }
+
+    TipoArtigoDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: A }
+        descricao: { type: string, nullable: true, example: Produtos Acabados e Intermédios }
+        tipo_at:
+          $ref: '#/components/schemas/TipoAt'
+        ficha_artigo: { type: boolean, example: true, description: "Cria ficha de artigo" }
+
+    TipoPagamentoDto:
+      description: "IdentityBase<string> — apenas codigo + descricao"
+      allOf:
+        - $ref: '#/components/schemas/SimpleStringEntity'
+
+    UnidadeDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: UN }
+        descricao: { type: string, nullable: true, example: Unidade }
+        unidade_unece: { type: string, nullable: true, example: C62, description: Código UNECE correspondente }
+
+    UnidadeUneceDto:
+      description: "IdentityBase<string> — apenas codigo + descricao"
+      allOf:
+        - $ref: '#/components/schemas/SimpleStringEntity'
+
+    VendedorDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: integer, format: int64, example: 1 }
+        descricao: { type: string, nullable: true, example: João Silva }
+        descricao2: { type: string, nullable: true }
+        obs: { type: string, nullable: true }
+        morada: { type: string, nullable: true, example: "Rua Principal, 1" }
+        morada2: { type: string, nullable: true }
+        cod_postal: { type: string, nullable: true, example: "4000-001 Porto" }
+        pais: { type: string, nullable: true, example: Portugal, description: "Nome do país (não código)" }
+        telefone: { type: string, nullable: true, example: "912345678" }
+        email: { type: string, nullable: true, example: joao.silva@empresa.pt }
+        prefixo: { type: string, nullable: true, example: PT, description: Código do prefixo país }
+        contribuinte: { type: string, nullable: true, example: "123456789" }
+        retencao: { type: boolean, example: false }
+        retencao_taxa: { type: number, format: float, example: 0.0 }
+        prazo_pagamento: { type: string, nullable: true, example: 30D }
+        expedicao: { type: string, nullable: true, example: DHL }
+        moeda: { type: string, nullable: true, example: EUR }
+        inactivo: { type: boolean, example: false }
+        tabela_comissoes: { type: string, nullable: true }
+        comissao1: { type: number, format: decimal, example: 0.00 }
+        comissao2: { type: number, format: decimal, example: 0.00 }
+        comissao3: { type: number, format: decimal, example: 0.00 }
+        comissao4: { type: number, format: decimal, example: 0.00 }
+        calculo_comissoes_data_hora: { type: string, format: date-time, nullable: true }
+        calculo_comissoes_da_data: { type: string, format: date, nullable: true }
+        calculo_comissoes_a_data: { type: string, format: date, nullable: true }
+        processa_comissoes_data_hora: { type: string, format: date-time, nullable: true }
+        processa_comissoes_da_data: { type: string, format: date, nullable: true }
+        processa_comissoes_a_data: { type: string, format: date, nullable: true }
+
+    ZonaDto:
+      type: object
+      required: [codigo, descricao]
+      properties:
+        codigo: { type: string, example: NORTE }
+        descricao: { type: string, nullable: true, example: Zona Norte }
+        dias: { type: integer, example: 2, description: "Dias de deslocação/entrega" }
+
+    # ── Generic response ──────────────────────────────────────────────────────
+    ApiResponse:
+      type: object
+      description: Envelope de resposta genérico da API
+
+paths:
+
+  # ════════════════════════════════════════════
+  # AUTH
+  # ════════════════════════════════════════════
+  /auth/login:
+    post:
+      tags: [Autenticação]
+      summary: Login
+      description: Autenticar utilizador e obter token JWT.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Tokens gerados.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Credenciais inválidas.
+
+  /auth/refresh-token:
+    post:
+      tags: [Autenticação]
+      summary: Refresh Token
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshTokenRequest'
+      responses:
+        '200':
+          description: Novo token gerado.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '401':
+          description: Refresh token inválido ou expirado.
+
+  # ════════════════════════════════════════════
+  # ÁREAS DE NEGÓCIO
+  # ════════════════════════════════════════════
+  /areas_negocio:
+    get:
+      tags: [Áreas de Negócio]
+      summary: Listar áreas de negócio
+      responses:
+        '200': { description: Lista de áreas de negócio }
+        '401': { description: Não autenticado }
+    post:
+      tags: [Áreas de Negócio]
+      summary: Criar área de negócio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AreaNegocioDto' }
+      responses:
+        '200': { description: Área criada }
+        '409': { description: Código já existe }
+
+  /areas_negocio/{areaNegocioCodigo}:
+    parameters:
+      - { name: areaNegocioCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Áreas de Negócio]
+      summary: Obter área de negócio
+      responses:
+        '200': { description: Dados da área }
+        '404': { description: Não encontrada }
+    put:
+      tags: [Áreas de Negócio]
+      summary: Atualizar área de negócio
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AreaNegocioDto' }
+      responses:
+        '200': { description: Área atualizada }
+        '404': { description: Não encontrada }
+    delete:
+      tags: [Áreas de Negócio]
+      summary: Eliminar área de negócio
+      responses:
+        '200': { description: Área eliminada }
+        '404': { description: Não encontrada }
+        '423': { description: Recurso bloqueado }
+
+  # ════════════════════════════════════════════
+  # ARMAZÉNS
+  # ════════════════════════════════════════════
+  /armazens:
+    get:
+      tags: [Armazéns]
+      summary: Listar armazéns
+      responses:
+        '200': { description: Lista de armazéns }
+    post:
+      tags: [Armazéns]
+      summary: Criar armazém
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArmazemDto' }
+      responses:
+        '200': { description: Armazém criado }
+        '409': { description: Código já existe }
+
+  /armazens/{armazemCodigo}:
+    parameters:
+      - { name: armazemCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Armazéns]
+      summary: Obter armazém
+      responses:
+        '200': { description: Dados do armazém }
+        '404': { description: Não encontrado }
+    put:
+      tags: [Armazéns]
+      summary: Atualizar armazém
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArmazemDto' }
+      responses:
+        '200': { description: Armazém atualizado }
+    delete:
+      tags: [Armazéns]
+      summary: Eliminar armazém
+      responses:
+        '200': { description: Eliminado }
+        '423': { description: Bloqueado }
+
+  # ════════════════════════════════════════════
+  # ARTIGOS
+  # ════════════════════════════════════════════
+  /artigos:
+    get:
+      tags: [Artigos]
+      summary: Listar artigos
+      responses:
+        '200': { description: Lista de artigos }
+    post:
+      tags: [Artigos]
+      summary: Criar artigo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArtigoDto' }
+      responses:
+        '200': { description: Artigo criado }
+        '409': { description: Código já existe }
+        '422': { description: Dados inválidos }
+
+  /artigos/{artigoCodigo}:
+    parameters:
+      - { name: artigoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Artigos]
+      summary: Obter artigo
+      responses:
+        '200': { description: Dados do artigo }
+        '404': { description: Não encontrado }
+    put:
+      tags: [Artigos]
+      summary: Atualizar artigo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ArtigoDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Artigos]
+      summary: Eliminar artigo
+      responses:
+        '200': { description: Eliminado }
+        '423': { description: Bloqueado }
+
+  /tipos_artigo:
+    get:
+      tags: [Artigos]
+      summary: Listar tipos de artigo
+      responses:
+        '200': { description: Lista de tipos }
+    post:
+      tags: [Artigos]
+      summary: Criar tipo de artigo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TipoArtigoDto' }
+      responses:
+        '200': { description: Criado }
+
+  /tipos_artigo/{tipoArtigoCodigo}:
+    parameters:
+      - { name: tipoArtigoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Artigos]
+      summary: Obter tipo de artigo
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Artigos]
+      summary: Atualizar tipo de artigo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TipoArtigoDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Artigos]
+      summary: Eliminar tipo de artigo
+      responses:
+        '200': { description: Eliminado }
+
+  # ════════════════════════════════════════════
+  # CLIENTES
+  # ════════════════════════════════════════════
+  /clientes:
+    get:
+      tags: [Clientes]
+      summary: Listar clientes
+      responses:
+        '200': { description: Lista de clientes }
+    post:
+      tags: [Clientes]
+      summary: Criar cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClienteDto' }
+      responses:
+        '200': { description: Cliente criado }
+        '422': { description: Dados inválidos (ex. NIF inválido) }
+
+  /clientes/{clienteCodigo}:
+    parameters:
+      - { name: clienteCodigo, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Clientes]
+      summary: Obter cliente
+      responses:
+        '200': { description: Dados do cliente }
+        '404': { description: Não encontrado }
+    put:
+      tags: [Clientes]
+      summary: Atualizar cliente
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClienteDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Clientes]
+      summary: Eliminar cliente
+      responses:
+        '200': { description: Eliminado }
+        '423': { description: Bloqueado }
+
+  # ════════════════════════════════════════════
+  # DOCUMENTOS E SÉRIES
+  # ════════════════════════════════════════════
+  /documentos:
+    get:
+      tags: [Documentos]
+      summary: Listar documentos
+      responses:
+        '200': { description: Lista de documentos }
+    post:
+      tags: [Documentos]
+      summary: Criar documento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentoDto' }
+      responses:
+        '200': { description: Criado }
+
+  /documentos/{documentoCodigo}:
+    parameters:
+      - { name: documentoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Documentos]
+      summary: Obter documento
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Documentos]
+      summary: Atualizar documento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/DocumentoDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Documentos]
+      summary: Eliminar documento
+      responses:
+        '200': { description: Eliminado }
+
+  /series:
+    get:
+      tags: [Documentos]
+      summary: Listar séries
+      responses:
+        '200': { description: Lista de séries }
+    post:
+      tags: [Documentos]
+      summary: Criar série
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SerieDto' }
+      responses:
+        '200': { description: Criada }
+
+  /series/{serieCodigo}:
+    parameters:
+      - { name: serieCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Documentos]
+      summary: Obter série
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Documentos]
+      summary: Atualizar série
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SerieDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Documentos]
+      summary: Eliminar série
+      responses:
+        '200': { description: Eliminada }
+
+  # ════════════════════════════════════════════
+  # EXPEDIÇÕES
+  # ════════════════════════════════════════════
+  /expedicoes:
+    get:
+      tags: [Expedições]
+      summary: Listar expedições
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Expedições]
+      summary: Criar expedição
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExpedicaoDto' }
+      responses:
+        '200': { description: Criada }
+
+  /expedicoes/{expedicaoCodigo}:
+    parameters:
+      - { name: expedicaoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Expedições]
+      summary: Obter expedição
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Expedições]
+      summary: Atualizar expedição
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ExpedicaoDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Expedições]
+      summary: Eliminar expedição
+      responses:
+        '200': { description: Eliminada }
+
+  # ════════════════════════════════════════════
+  # FÓRMULAS
+  # ════════════════════════════════════════════
+  /formulas:
+    get:
+      tags: [Fórmulas]
+      summary: Listar fórmulas
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Fórmulas]
+      summary: Criar fórmula
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FormulaDto' }
+      responses:
+        '200': { description: Criada }
+
+  /formulas/{formulaCodigo}:
+    parameters:
+      - { name: formulaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Fórmulas]
+      summary: Obter fórmula
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Fórmulas]
+      summary: Atualizar fórmula
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FormulaDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Fórmulas]
+      summary: Eliminar fórmula
+      responses:
+        '200': { description: Eliminada }
+
+  # ════════════════════════════════════════════
+  # GRUPOS / FAMÍLIAS / SUBFAMÍLIAS
+  # ════════════════════════════════════════════
+  /grupos:
+    get:
+      tags: [Grupos]
+      summary: Listar grupos
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Grupos]
+      summary: Criar grupo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrupoDto' }
+      responses:
+        '200': { description: Criado }
+
+  /grupos/{grupoCodigo}:
+    parameters:
+      - { name: grupoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Grupos]
+      summary: Obter grupo
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Grupos]
+      summary: Atualizar grupo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrupoDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Grupos]
+      summary: Eliminar grupo
+      responses:
+        '200': { description: Eliminado }
+
+  /grupos/{grupoCodigo}/familias:
+    parameters:
+      - { name: grupoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Grupos]
+      summary: Listar famílias do grupo
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Grupos]
+      summary: Criar família
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FamiliaDto' }
+      responses:
+        '200': { description: Criada }
+
+  /grupos/{grupoCodigo}/familias/{familiaCodigo}:
+    parameters:
+      - { name: grupoCodigo, in: path, required: true, schema: { type: string } }
+      - { name: familiaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Grupos]
+      summary: Obter família
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Grupos]
+      summary: Atualizar família
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/FamiliaDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Grupos]
+      summary: Eliminar família
+      responses:
+        '200': { description: Eliminada }
+
+  /grupos/{grupoCodigo}/familias/{familiaCodigo}/subfamilias:
+    parameters:
+      - { name: grupoCodigo, in: path, required: true, schema: { type: string } }
+      - { name: familiaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Grupos]
+      summary: Listar subfamílias
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Grupos]
+      summary: Criar subfamília
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubfamiliaDto' }
+      responses:
+        '200': { description: Criada }
+
+  /grupos/{grupoCodigo}/familias/{familiaCodigo}/subfamilias/{subfamiliaCodigo}:
+    parameters:
+      - { name: grupoCodigo, in: path, required: true, schema: { type: string } }
+      - { name: familiaCodigo, in: path, required: true, schema: { type: string } }
+      - { name: subfamiliaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Grupos]
+      summary: Obter subfamília
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Grupos]
+      summary: Atualizar subfamília
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/SubfamiliaDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Grupos]
+      summary: Eliminar subfamília
+      responses:
+        '200': { description: Eliminada }
+
+  # ════════════════════════════════════════════
+  # GRUPOS DE ENTIDADE
+  # ════════════════════════════════════════════
+  /grupos_entidade:
+    get:
+      tags: [Grupos de Entidade]
+      summary: Listar grupos de entidade
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Grupos de Entidade]
+      summary: Criar grupo de entidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrupoEntidadeDto' }
+      responses:
+        '200': { description: Criado }
+
+  /grupos_entidade/{grupoEntidadeCodigo}:
+    parameters:
+      - { name: grupoEntidadeCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Grupos de Entidade]
+      summary: Obter grupo de entidade
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Grupos de Entidade]
+      summary: Atualizar grupo de entidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/GrupoEntidadeDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Grupos de Entidade]
+      summary: Eliminar grupo de entidade
+      responses:
+        '200': { description: Eliminado }
+
+  # ════════════════════════════════════════════
+  # IDIOMAS
+  # ════════════════════════════════════════════
+  /idiomas:
+    get:
+      tags: [Idiomas]
+      summary: Listar idiomas
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Idiomas]
+      summary: Criar idioma
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IdiomaDto' }
+      responses:
+        '200': { description: Criado }
+
+  /idiomas/{idiomaCodigo}:
+    parameters:
+      - { name: idiomaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Idiomas]
+      summary: Obter idioma
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Idiomas]
+      summary: Atualizar idioma
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IdiomaDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Idiomas]
+      summary: Eliminar idioma
+      responses:
+        '200': { description: Eliminado }
+
+  # ════════════════════════════════════════════
+  # IVA / ISENÇÕES / REGIMES
+  # ════════════════════════════════════════════
+  /ivas:
+    get:
+      tags: [IVA]
+      summary: Listar taxas de IVA
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [IVA]
+      summary: Criar taxa de IVA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IvaDto' }
+      responses:
+        '200': { description: Criada }
+
+  /ivas/{ivaCodigo}:
+    parameters:
+      - { name: ivaCodigo, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [IVA]
+      summary: Obter taxa de IVA
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [IVA]
+      summary: Atualizar taxa de IVA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IvaDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [IVA]
+      summary: Eliminar taxa de IVA
+      responses:
+        '200': { description: Eliminada }
+
+  /isencoes_iva:
+    get:
+      tags: [IVA]
+      summary: Listar isenções de IVA
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [IVA]
+      summary: Criar isenção de IVA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IsencaoIvaDto' }
+      responses:
+        '200': { description: Criada }
+
+  /isencoes_iva/{isencaoIvaCodigo}:
+    parameters:
+      - { name: isencaoIvaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [IVA]
+      summary: Obter isenção de IVA
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [IVA]
+      summary: Atualizar isenção de IVA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/IsencaoIvaDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [IVA]
+      summary: Eliminar isenção de IVA
+      responses:
+        '200': { description: Eliminada }
+
+  /regimes_iva:
+    get:
+      tags: [IVA]
+      summary: Listar regimes de IVA
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [IVA]
+      summary: Criar regime de IVA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegimeIvaDto' }
+      responses:
+        '200': { description: Criado }
+
+  /regimes_iva/{regimeIvaCodigo}:
+    parameters:
+      - { name: regimeIvaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [IVA]
+      summary: Obter regime de IVA
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [IVA]
+      summary: Atualizar regime de IVA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegimeIvaDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [IVA]
+      summary: Eliminar regime de IVA
+      responses:
+        '200': { description: Eliminado }
+
+  # ════════════════════════════════════════════
+  # MARCAS
+  # ════════════════════════════════════════════
+  /marcas:
+    get:
+      tags: [Marcas]
+      summary: Listar marcas
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Marcas]
+      summary: Criar marca
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarcaDto' }
+      responses:
+        '200': { description: Criada }
+
+  /marcas/{marcaCodigo}:
+    parameters:
+      - { name: marcaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Marcas]
+      summary: Obter marca
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Marcas]
+      summary: Atualizar marca
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MarcaDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Marcas]
+      summary: Eliminar marca
+      responses:
+        '200': { description: Eliminada }
+
+  # ════════════════════════════════════════════
+  # MOEDAS
+  # ════════════════════════════════════════════
+  /moedas:
+    get:
+      tags: [Moedas]
+      summary: Listar moedas
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Moedas]
+      summary: Criar moeda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoedaDto' }
+      responses:
+        '200': { description: Criada }
+
+  /moedas/{moedaCodigo}:
+    parameters:
+      - { name: moedaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Moedas]
+      summary: Obter moeda
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Moedas]
+      summary: Atualizar moeda
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/MoedaDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Moedas]
+      summary: Eliminar moeda
+      responses:
+        '200': { description: Eliminada }
+
+  # ════════════════════════════════════════════
+  # PAÍSES E PREFIXOS
+  # ════════════════════════════════════════════
+  /paises:
+    get:
+      tags: [Países]
+      summary: Listar países
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Países]
+      summary: Criar país
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaisDto' }
+      responses:
+        '200': { description: Criado }
+
+  /paises/{paisCodigo}:
+    parameters:
+      - { name: paisCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Países]
+      summary: Obter país
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Países]
+      summary: Atualizar país
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PaisDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Países]
+      summary: Eliminar país
+      responses:
+        '200': { description: Eliminado }
+
+  /prefixos_paises:
+    get:
+      tags: [Países]
+      summary: Listar prefixos de países
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Países]
+      summary: Criar prefixo de país
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrefixoPaisDto' }
+      responses:
+        '200': { description: Criado }
+
+  /prefixos_paises/{prefixoPaisCodigo}:
+    parameters:
+      - { name: prefixoPaisCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Países]
+      summary: Obter prefixo
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Países]
+      summary: Atualizar prefixo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrefixoPaisDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Países]
+      summary: Eliminar prefixo
+      responses:
+        '200': { description: Eliminado }
+
+  /prefixos_paises/alfa2/{alfa2}:
+    parameters:
+      - { name: alfa2, in: path, required: true, schema: { type: string }, description: "Código Alfa-2 (ex: PT)" }
+    get:
+      tags: [Países]
+      summary: Obter prefixo por Alfa-2
+      responses:
+        '200': { description: Dados }
+
+  /prefixo_paises/alfa3/{alfa3}:
+    parameters:
+      - { name: alfa3, in: path, required: true, schema: { type: string }, description: "Código Alfa-3 (ex: PRT)" }
+    get:
+      tags: [Países]
+      summary: Obter prefixo por Alfa-3
+      responses:
+        '200': { description: Dados }
+
+  # ════════════════════════════════════════════
+  # POSTOS
+  # ════════════════════════════════════════════
+  /postos:
+    get:
+      tags: [Postos]
+      summary: Listar postos
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Postos]
+      summary: Criar posto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PostoDto' }
+      responses:
+        '200': { description: Criado }
+
+  /postos/{postoCodigo}:
+    parameters:
+      - { name: postoCodigo, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Postos]
+      summary: Obter posto
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Postos]
+      summary: Atualizar posto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PostoDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Postos]
+      summary: Eliminar posto
+      responses:
+        '200': { description: Eliminado }
+
+  # ════════════════════════════════════════════
+  # PRAZOS DE PAGAMENTO / FORMAS / TIPOS
+  # ════════════════════════════════════════════
+  /prazos_pagamento:
+    get:
+      tags: [Pagamentos]
+      summary: Listar prazos de pagamento
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Pagamentos]
+      summary: Criar prazo de pagamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrazoPagamentoDto' }
+      responses:
+        '200': { description: Criado }
+
+  /prazos_pagamento/{prazoPagamentoCodigo}:
+    parameters:
+      - { name: prazoPagamentoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Pagamentos]
+      summary: Obter prazo
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Pagamentos]
+      summary: Atualizar prazo
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/PrazoPagamentoDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Pagamentos]
+      summary: Eliminar prazo
+      responses:
+        '200': { description: Eliminado }
+
+  /tipos_pagamento:
+    get:
+      tags: [Pagamentos]
+      summary: Listar tipos de pagamento
+      responses:
+        '200': { description: Lista }
+
+  /tipos_pagamento/{tipoPagamentoCodigo}:
+    parameters:
+      - { name: tipoPagamentoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Pagamentos]
+      summary: Obter tipo de pagamento
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Pagamentos]
+      summary: Atualizar tipo de pagamento
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TipoPagamentoDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Pagamentos]
+      summary: Eliminar tipo de pagamento
+      responses:
+        '200': { description: Eliminado }
+
+  # ════════════════════════════════════════════
+  # TEXTOS
+  # ════════════════════════════════════════════
+  /textos:
+    get:
+      tags: [Textos]
+      summary: Listar textos
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Textos]
+      summary: Criar texto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TextoDto' }
+      responses:
+        '200': { description: Criado }
+
+  /textos/{textoCodigo}:
+    parameters:
+      - { name: textoCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Textos]
+      summary: Obter texto
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Textos]
+      summary: Atualizar texto
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/TextoDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Textos]
+      summary: Eliminar texto
+      responses:
+        '200': { description: Eliminado }
+
+  # ════════════════════════════════════════════
+  # UNIDADES
+  # ════════════════════════════════════════════
+  /unidades:
+    get:
+      tags: [Unidades]
+      summary: Listar unidades
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Unidades]
+      summary: Criar unidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnidadeDto' }
+      responses:
+        '200': { description: Criada }
+
+  /unidades/{unidadeCodigo}:
+    parameters:
+      - { name: unidadeCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Unidades]
+      summary: Obter unidade
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Unidades]
+      summary: Atualizar unidade
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnidadeDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Unidades]
+      summary: Eliminar unidade
+      responses:
+        '200': { description: Eliminada }
+
+  /unidades_unece:
+    get:
+      tags: [Unidades]
+      summary: Listar unidades UNECE
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Unidades]
+      summary: Criar unidade UNECE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnidadeUneceDto' }
+      responses:
+        '200': { description: Criada }
+
+  /unidades_unece/{unidadeUneceCodigo}:
+    parameters:
+      - { name: unidadeUneceCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Unidades]
+      summary: Obter unidade UNECE
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Unidades]
+      summary: Atualizar unidade UNECE
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UnidadeUneceDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Unidades]
+      summary: Eliminar unidade UNECE
+      responses:
+        '200': { description: Eliminada }
+
+  # ════════════════════════════════════════════
+  # VENDEDORES
+  # ════════════════════════════════════════════
+  /vendedores:
+    get:
+      tags: [Vendedores]
+      summary: Listar vendedores
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Vendedores]
+      summary: Criar vendedor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VendedorDto' }
+      responses:
+        '200': { description: Criado }
+
+  /vendedores/{vendedorCodigo}:
+    parameters:
+      - { name: vendedorCodigo, in: path, required: true, schema: { type: integer, format: int64 } }
+    get:
+      tags: [Vendedores]
+      summary: Obter vendedor
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Vendedores]
+      summary: Atualizar vendedor
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VendedorDto' }
+      responses:
+        '200': { description: Atualizado }
+    delete:
+      tags: [Vendedores]
+      summary: Eliminar vendedor
+      responses:
+        '200': { description: Eliminado }
+
+  # ════════════════════════════════════════════
+  # ZONAS
+  # ════════════════════════════════════════════
+  /zonas:
+    get:
+      tags: [Zonas]
+      summary: Listar zonas
+      responses:
+        '200': { description: Lista }
+    post:
+      tags: [Zonas]
+      summary: Criar zona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZonaDto' }
+      responses:
+        '200': { description: Criada }
+
+  /zonas/{zonaCodigo}:
+    parameters:
+      - { name: zonaCodigo, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Zonas]
+      summary: Obter zona
+      responses:
+        '200': { description: Dados }
+    put:
+      tags: [Zonas]
+      summary: Atualizar zona
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ZonaDto' }
+      responses:
+        '200': { description: Atualizada }
+    delete:
+      tags: [Zonas]
+      summary: Eliminar zona
+      responses:
+        '200': { description: Eliminada }
+
+tags:
+  - name: Autenticação
+  - name: Áreas de Negócio
+  - name: Armazéns
+  - name: Artigos
+  - name: Clientes
+  - name: Documentos
+  - name: Expedições
+  - name: Fórmulas
+  - name: Grupos
+  - name: Grupos de Entidade
+  - name: Idiomas
+  - name: IVA
+  - name: Marcas
+  - name: Moedas
+  - name: Países
+  - name: Pagamentos
+  - name: Postos
+  - name: Textos
+  - name: Unidades
+  - name: Vendedores
+  - name: Zonas
