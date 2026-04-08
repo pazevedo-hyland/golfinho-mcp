@@ -31,9 +31,13 @@ async def login() -> None:
 async def configure_db() -> None:
     """Configure database access via the old API endpoint."""
     s = get_settings()
-    # Skip if no DB config provided
-    if not s.db_servidor and not s.db_base_dados:
-        logger.info("No DB config provided — skipping configurarAcessoBD")
+    # Skip if required DB fields are missing
+    if not s.db_servidor or not s.db_base_dados:
+        logger.info(
+            "DB config incomplete (servidor=%s, basedados=%s) — skipping configurarAcessoBD",
+            s.db_servidor or "<empty>",
+            s.db_base_dados or "<empty>",
+        )
         return
 
     await client.put_old(

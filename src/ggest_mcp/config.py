@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     username: str
     password: str
 
+    # Read-only mode — when True (default), update tools are disabled
+    readonly: bool = True
+
     # Database connection — sent to /api/configurarAcessoBD on startup
     db_servidor: str = ""
     db_porta: str = ""

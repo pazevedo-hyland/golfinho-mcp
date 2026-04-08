@@ -42,6 +42,10 @@ GGEST_HOST=golfinhosoftware.pcscloud.net
 GGEST_USERNAME=o_teu_username
 GGEST_PASSWORD=a_tua_password
 
+# Modo read-only (default: true)
+# Mudar para false para ativar update_artigo e update_cliente
+GGEST_READONLY=true
+
 # Base de dados (opcional — necessário se a BD ainda não estiver configurada)
 GGEST_DB_SERVIDOR=servidor
 GGEST_DB_PORTA=4900
@@ -64,6 +68,44 @@ O server fica acessível em `http://localhost:8000/mcp`.
 pip install -e .
 python -m ggest_mcp.server
 ```
+
+## Exemplos de perguntas
+
+Depois de ligar o MCP server ao teu cliente (VS Code, Claude Desktop, etc.), experimenta:
+
+**Artigos / Produtos**
+- "Mostra-me os artigos que contenham 'café' na descrição"
+- "Qual o preço e stock do artigo COM-001?"
+- "Atualiza o preço1 do artigo COM-001 para 12.50€"
+- "Que artigos têm o código de barras 5601234567890?"
+
+**Clientes**
+- "Lista os clientes com 'Silva' no nome"
+- "Dá-me a ficha completa do cliente 1"
+- "Atualiza o email do cliente 1 para novo@email.pt"
+- "Que clientes têm o NIF 123456789?"
+
+**Entidades de Referência**
+- "Que grupos de artigos existem?"
+- "Lista os vendedores disponíveis"
+- "Mostra as famílias do grupo G01"
+- "Que formas de pagamento existem?"
+
+**IVA**
+- "Quais são as taxas de IVA em vigor?"
+- "Lista os motivos de isenção de IVA"
+
+**Relatórios / Mapas**
+- "Relatório de vendas gerais de janeiro a março de 2026"
+- "Extrato de conta corrente do cliente 5 no último trimestre"
+- "Mostra o mapa de idade de saldos dos clientes"
+- "Quais os 10 artigos mais vendidos em 2026?"
+- "Vendas por grupo de artigos de janeiro a março de 2026"
+- "Volume de vendas mensal no primeiro semestre de 2026"
+
+**Sistema**
+- "Qual a data e hora atual do sistema gGest?"
+- "Que documentos tem o cliente 3 pendentes de recibo?"
 
 ## Configurar no Claude Desktop
 
