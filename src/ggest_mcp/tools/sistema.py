@@ -9,13 +9,6 @@ from ggest_mcp.app import mcp
 
 
 @mcp.tool()
-async def ler_data_hora() -> str:
-    """Obter a data e hora atuais do sistema gGest."""
-    data = await client.get_old("/lerDataHora")
-    return json.dumps(data, ensure_ascii=False, default=str)
-
-
-@mcp.tool()
 async def get_pendentes_recibo(cliente: int, moeda: str = "EUR") -> str:
     """Listar documentos pendentes de pagamento (para recibo) de um cliente.
 

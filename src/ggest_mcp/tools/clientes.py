@@ -1,9 +1,9 @@
-"""Clientes tools — list, get, update customers."""
+"""Clientes tools — list, get, create, update customers."""
 
 from __future__ import annotations
 
 import json
-from typing import Optional
+from typing import Any, Optional
 
 from ggest_mcp.http_client import client
 from ggest_mcp.app import mcp
@@ -117,3 +117,98 @@ async def update_cliente(
 
     data = await client.put_v1(f"/clientes/{codigo}", json=payload)
     return json.dumps(data, ensure_ascii=False, default=str) if data else "Cliente atualizado com sucesso."
+
+
+@mcp.tool()
+async def create_cliente(
+    descricao: str,
+    codigo: Optional[int] = None,
+    morada: Optional[str] = None,
+    morada2: Optional[str] = None,
+    codpostal: Optional[str] = None,
+    pais: Optional[str] = None,
+    contribuinte: Optional[str] = None,
+    telefone1: Optional[str] = None,
+    telemovel1: Optional[str] = None,
+    email1: Optional[str] = None,
+    espaco_fiscal: Optional[str] = None,
+    prazo_pagamento: Optional[str] = None,
+    expedicao: Optional[str] = None,
+    vendedor: Optional[int] = None,
+    moeda: Optional[str] = None,
+    zona: Optional[str] = None,
+    grupo: Optional[str] = None,
+    obs: Optional[str] = None,
+    extras: Optional[dict[str, Any]] = None,
+) -> str:
+    """Criar um novo cliente no gGest.
+
+    Parâmetros obrigatórios:
+    - descricao: nome do cliente (ex: "João Silva, Lda.")
+
+    Parâmetros opcionais mais comuns:
+    - codigo: código numérico (None = atribuição automática pelo servidor, default)
+    - morada, morada2, codpostal, pais: endereço
+    - contribuinte: NIF / número de contribuinte
+    - telefone1, telemovel1, email1: contactos principais
+    - espaco_fiscal: espaço fiscal (ex: "PT")
+    - prazo_pagamento: código do prazo de pagamento (ex: "PP01")
+    - expedicao: código do método de expedição
+    - vendedor: código do vendedor associado
+    - moeda: código da moeda (ex: "EUR")
+    - zona, grupo: classificação do cliente
+    - obs: observações de texto livre
+    - extras: campos adicionais em formato dict (para campos avançados
+      não listados acima, ex: {"retencao": true, "retencao_taxa": 25.0})
+
+    Exemplo:
+        create_cliente(
+            descricao="Padaria Central, Lda.",
+            contribuinte="123456789",
+            morada="Rua da Padaria, 10",
+            codpostal="1000-001",
+            pais="PT",
+            email1="padaria@email.pt",
+            moeda="EUR",
+        )
+    """
+    payload: dict[str, Any] = {"descricao": descricao}
+    if codigo is not None:
+        payload["codigo"] = codigo
+    if morada is not None:
+        payload["morada"] = morada
+    if morada2 is not None:
+        payload["morada2"] = morada2
+    if codpostal is not None:
+        payload["codpostal"] = codpostal
+    if pais is not None:
+        payload["pais"] = pais
+    if contribuinte is not None:
+        payload["contribuinte"] = contribuinte
+    if telefone1 is not None:
+        payload["telefone1"] = telefone1
+    if telemovel1 is not None:
+        payload["telemovel1"] = telemovel1
+    if email1 is not None:
+        payload["email1"] = email1
+    if espaco_fiscal is not None:
+        payload["espaco_fiscal"] = espaco_fiscal
+    if prazo_pagamento is not None:
+        payload["prazo_pagamento"] = prazo_pagamento
+    if expedicao is not None:
+        payload["expedicao"] = expedicao
+    if vendedor is not None:
+        payload["vendedor"] = vendedor
+    if moeda is not None:
+        payload["moeda"] = moeda
+    if zona is not None:
+        payload["zona"] = zona
+    if grupo is not None:
+        payload["grupo"] = grupo
+    if obs is not None:
+        payload["obs"] = obs
+    if extras:
+        payload.update(extras)
+
+    data = await client.post_v1("/clientes", json=payload)
+    return json.dumps(data, ensure_ascii=False, default=str) if data else "Cliente criado com sucesso."

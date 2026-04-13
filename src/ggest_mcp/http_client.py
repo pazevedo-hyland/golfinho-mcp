@@ -163,7 +163,8 @@ class GGestClient:
     async def put_v1(self, path: str, *, json: Any | None = None) -> Any:
         return await self._request_v1("PUT", f"{get_settings().base_url_v1}{path}", json=json)
 
-    # POST on v1 only needed for auth (handled separately) — not exposed as general method
+    async def post_v1(self, path: str, *, json: Any | None = None) -> Any:
+        return await self._request_v1("POST", f"{get_settings().base_url_v1}{path}", json=json)
 
     # ── Old API ───────────────────────────────────────────────────────────
 
