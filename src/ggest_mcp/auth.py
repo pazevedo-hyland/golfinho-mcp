@@ -25,7 +25,22 @@ async def login() -> None:
     if not access_token:
         raise RuntimeError(f"Login failed — no access_token in response: {data}")
     client.set_tokens(access_token, refresh_token or "")
-    logger.info("Successfully logged in to gGest API")
+    logger.info("Successfully logged in to gGest v1 API")
+
+
+async def login_old() -> None:
+    """Authenticate with the old gGest API and store its separate token."""
+    s = get_settings()
+    url = f"{s.base_url_old}/pedirToken"
+    data = await client.post_raw(
+        url,
+        json={"utilizador": s.username, "palavrapasse": s.password},
+    )
+    token = data.get("token")
+    if not token:
+        raise RuntimeError(f"Old API login failed — no token in response: {data}")
+    client.set_old_token(token)
+    logger.info("Successfully logged in to gGest old API")
 
 
 async def configure_db() -> None:
@@ -59,5 +74,6 @@ async def ensure_authenticated() -> None:
     if _authenticated:
         return
     await login()
+    await login_old()
     await configure_db()
     _authenticated = True

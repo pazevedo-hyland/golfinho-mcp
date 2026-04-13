@@ -53,6 +53,7 @@ BASE_OLD = f"https://{HOST}/api"
 # ---------------------------------------------------------------------------
 
 _cached_token: str | None = None
+_cached_old_token: str | None = None
 _db_configured: bool = False
 
 
@@ -75,6 +76,27 @@ async def _get_token() -> str:
     _cached_token = data.get("access_token")
     assert _cached_token, f"No access_token in response: {data}"
     return _cached_token
+
+
+async def _get_old_token() -> str:
+    """Login to the old API once, cache the token for all tests."""
+    global _cached_old_token
+    if _cached_old_token:
+        return _cached_old_token
+    if not USERNAME or not PASSWORD:
+        pytest.skip("GGEST_USERNAME / GGEST_PASSWORD not set")
+    async with httpx.AsyncClient(timeout=30.0) as c:
+        resp = await c.post(
+            f"{BASE_OLD}/pedirToken",
+            json={"utilizador": USERNAME, "palavrapasse": PASSWORD},
+        )
+    assert resp.status_code == 200, (
+        f"Old API login failed: {resp.status_code} {resp.text[:300]}"
+    )
+    data = resp.json()
+    _cached_old_token = data.get("token")
+    assert _cached_old_token, f"No token in old API response: {data}"
+    return _cached_old_token
 
 
 async def _ensure_db(token: str) -> None:
@@ -123,6 +145,15 @@ async def auth_headers() -> dict[str, str]:
     token = await _get_token()
     await _ensure_db(token)
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+async def old_auth_headers() -> dict[str, str]:
+    old_token = await _get_old_token()
+    # DB config uses v1 token
+    v1_token = await _get_token()
+    await _ensure_db(v1_token)
+    return {"Authorization": f"Bearer {old_token}"}
 
 
 # ===========================================================================
@@ -235,14 +266,14 @@ class TestIVA:
 
 
 class TestSistema:
-    async def test_ler_data_hora(self, auth_headers: dict) -> None:
-        resp = await _get(BASE_OLD, "/lerDataHora", auth_headers)
+    async def test_ler_data_hora(self, old_auth_headers: dict) -> None:
+        resp = await _get(BASE_OLD, "/lerDataHora", old_auth_headers)
         assert resp.status_code == 200, (
             f"lerDataHora: {resp.status_code} {resp.text[:200]}"
         )
 
-    async def test_pendentes_recibo(self, auth_headers: dict) -> None:
-        resp = await _get(BASE_OLD, "/pendentesRecibo/2/EUR", auth_headers)
+    async def test_pendentes_recibo(self, old_auth_headers: dict) -> None:
+        resp = await _get(BASE_OLD, "/pendentesRecibo/2/EUR", old_auth_headers)
         assert resp.status_code == 200, (
             f"pendentesRecibo: {resp.status_code} {resp.text[:200]}"
         )
@@ -319,8 +350,8 @@ _MAPA_PAYLOADS: dict[str, dict[str, Any]] = {
         "a_data": "2026-01-31",
     },
     "/mapaComparacaoAnualVolumeVendas": {
-        "ano1": 2025,
-        "ano2": 2026,
+        "ano1": 2026,
+        "ano2": 2025,
         "periodo_analise": 1,
     },
 }
@@ -330,6 +361,6 @@ class TestMapas:
     @pytest.mark.parametrize(
         "path,payload", list(_MAPA_PAYLOADS.items()), ids=list(_MAPA_PAYLOADS.keys())
     )
-    async def test_mapa(self, auth_headers: dict, path: str, payload: dict) -> None:
-        resp = await _post(BASE_OLD, path, auth_headers, payload)
+    async def test_mapa(self, old_auth_headers: dict, path: str, payload: dict) -> None:
+        resp = await _post(BASE_OLD, path, old_auth_headers, payload)
         assert resp.status_code == 200, f"{path}: {resp.status_code} {resp.text[:300]}"
