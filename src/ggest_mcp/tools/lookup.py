@@ -52,10 +52,29 @@ async def lookup_entity(
 
     Para entidades hierárquicas:
     - familias: requer 'grupo' (ex: lookup_entity("familias", grupo="G01"))
-    - subfamilias: requer 'grupo' e 'familia' (ex: lookup_entity("subfamilias", grupo="G01", familia="F01"))
+    - subfamilias: requer 'grupo' e 'familia'
 
     Se 'codigo' for fornecido, devolve o detalhe dessa entidade.
     Caso contrário, devolve a lista completa.
+
+    Retorna (JSON): lista de entidades ou detalhe de uma entidade.
+    Cada entidade tem tipicamente: codigo, descricao, e campos específicos
+    do tipo (ex: taxa para IVA, prefixo para países).
+
+    ╔══ Tipos mais usados para workflows de escrita ══╗
+    ║ "documentos"       → tipos de doc válidos (FT, OR, GT, FC…)  ║
+    ║ "series"           → séries documentais ativas ("2026"…)      ║
+    ║ "tipos_pagamento"  → formas de pagamento (NUM, TRFB, MB…)    ║
+    ║ "vendedores"       → vendedores disponíveis                   ║
+    ║ "armazens"         → armazéns para linhas de documentos       ║
+    ║ "prazos_pagamento" → prazos para faturas a crédito           ║
+    ╚════════════════════════════════════════════════════════════╝
+
+    Exemplo:
+        lookup_entity("documentos")  # todos os tipos de documento
+        lookup_entity("tipos_pagamento")  # formas de pagamento
+        lookup_entity("vendedores", codigo="3")  # detalhe do vendedor 3
+        lookup_entity("familias", grupo="G01")  # famílias do grupo G01
     """
     # Handle hierarchical entities (famílias, subfamílias)
     if entity_type == "familias":
@@ -79,7 +98,9 @@ async def lookup_entity(
     # Standard flat entities
     base_path = _ENTITY_PATHS.get(entity_type)
     if base_path is None:
-        supported = ", ".join(sorted(_ENTITY_PATHS.keys()) + ["familias", "subfamilias"])
+        supported = ", ".join(
+            sorted(_ENTITY_PATHS.keys()) + ["familias", "subfamilias"]
+        )
         return f"Tipo de entidade '{entity_type}' não suportado. Tipos válidos: {supported}"
 
     path = base_path

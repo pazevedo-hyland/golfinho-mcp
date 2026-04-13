@@ -27,7 +27,7 @@ async def mapa_vendas_gerais(
     pagina: int = 1,
     itens_por_pagina: int = 50,
 ) -> str:
-    """Relatório de vendas gerais — lista todos os documentos num período.
+    """Relatório de vendas gerais — lista todos os documentos comerciais num período.
 
     Parâmetros obrigatórios:
     - da_data_hora: data/hora início (ISO8601, ex: "2026-01-01T00:00:00")
@@ -44,8 +44,19 @@ async def mapa_vendas_gerais(
     - pagina: número da página (default 1)
     - itens_por_pagina: itens por página (default 50, max 200)
 
-    Devolve página de documentos com tipo, número, cliente, totais, IVA, vendedor, etc.
-    O campo _paginacao indica total_itens e total_paginas.
+    Retorna (JSON):
+    - dados: lista de documentos, cada um com:
+        - doc_codigo, doc_numero, doc_serie, doc_ano
+        - entidade_codigo, entidade_descricao, entidade_contribuinte
+        - total_documento, total_iva, total_sem_iva
+        - data_doc, data_venc, vendedor, posto
+    - _paginacao: {pagina, itens_por_pagina, total_itens, total_paginas}
+
+    Exemplo:
+        mapa_vendas_gerais(
+            da_data_hora="2026-01-01T00:00:00",
+            a_data_hora="2026-03-31T23:59:59",
+        )
     """
     payload: dict = {
         "Da_data_hora": da_data_hora,
@@ -103,8 +114,17 @@ async def mapa_extrato_clientes(
     - pagina: número da página (default 1)
     - itens_por_pagina: itens por página (default 50, max 200)
 
-    Devolve página de movimentos com documento, data, débito, crédito, saldo.
-    O campo _paginacao indica total_itens e total_paginas.
+    Retorna (JSON):
+    - dados: lista de movimentos, cada um com:
+        - entidade_codigo, entidade_descricao
+        - doc_codigo, doc_numero, doc_serie, doc_ano
+        - data_doc, data_venc
+        - debito, credito, saldo_acumulado
+        - descricao_documento
+    - _paginacao: {pagina, itens_por_pagina, total_itens, total_paginas}
+
+    Exemplo:
+        mapa_extrato_clientes(da_data="2026-01-01", a_data="2026-03-31", cliente=5)
     """
     payload: dict = {
         "da_data": da_data,
@@ -137,16 +157,23 @@ async def mapa_idade_saldos(
 ) -> str:
     """Mapa de idade de saldos de clientes (aging report).
 
-    Mostra saldos agrupados por antiguidade:
-    - Não vencidos
-    - < 30 dias
-    - 30-60 dias
-    - 61-90 dias
-    - > 90 dias
-    - Total
+    Mostra os saldos de cada cliente agrupados por antiguidade do vencimento.
 
     Parâmetro opcional:
     - incluir_entidades_inativas: incluir clientes inativos (default: false)
+
+    Retorna (JSON) — lista de clientes com saldos, cada um com:
+    - entidade_codigo, entidade_descricao
+    - nao_vencido: montante ainda dentro do prazo
+    - ate_30_dias: vencido há menos de 30 dias
+    - de_30_a_60_dias: vencido entre 30 e 60 dias
+    - de_61_a_90_dias: vencido entre 61 e 90 dias
+    - mais_de_90_dias: vencido há mais de 90 dias
+    - total: saldo total do cliente
+
+    Exemplo:
+        mapa_idade_saldos()
+        mapa_idade_saldos(incluir_entidades_inativas=True)
     """
     payload = {
         "cobranca_normal": True,
@@ -175,9 +202,15 @@ async def mapa_top_artigos(
     Opcionais:
     - numero_artigos: quantos artigos mostrar (1-50, default 20)
     - total_ou_quantidade: "T" = ordenar por valor total, "Q" = por quantidade
-    - total_com_iva: valores com IVA incluído
+    - total_com_iva: valores com IVA incluído (default: true)
 
-    Devolve lista com código, descrição, quantidade e total por artigo.
+    Retorna (JSON) — lista dos artigos mais vendidos, cada um com:
+    - artigo (código), descricao
+    - quantidade: total vendido no período
+    - total: valor total de vendas (com ou sem IVA conforme parâmetro)
+
+    Exemplo:
+        mapa_top_artigos(da_data="2026-01-01", a_data="2026-06-30", numero_artigos=10)
     """
     payload = {
         "da_data": da_data,
@@ -207,21 +240,45 @@ async def mapa_vendas_artigos(
     pagina: int = 1,
     itens_por_pagina: int = 50,
 ) -> str:
-    """Vendas de artigos — por grupo ou resumo.
+    """Vendas de artigos — por grupo ou resumo individual.
 
     Parâmetros obrigatórios:
-    - da_data_hora: data/hora início (ISO8601)
-    - a_data_hora: data/hora fim (ISO8601)
-    - modo: "grupo" (vendas agrupadas por grupo) ou "resumo" (resumo por artigo)
+    - da_data_hora: data/hora início (ISO8601, ex: "2026-01-01T00:00:00")
+    - a_data_hora: data/hora fim (ISO8601, ex: "2026-03-31T23:59:59")
+    - modo: "grupo" ou "resumo"
 
-    Filtros opcionais variam por modo. Comuns: vendedor, marca, cliente, séries, postos.
-    Modo "resumo" suporta também: grupo_codigo, familia_codigo, subfamilia_codigo.
+    Modo "grupo" — vendas agrupadas por grupo de artigo:
+      Filtros: vendedor, marca, cliente, lista_series, lista_postos
+      Retorna por grupo: grupo_codigo, grupo_descricao, total_com_iva,
+      total_sem_iva, total_quant (quantidade total do grupo)
 
-    Paginação (client-side, resultados podem ser muitos):
+    Modo "resumo" — vendas individuais por artigo:
+      Filtros adicionais: grupo_codigo, familia_codigo, subfamilia_codigo
+      Retorna por artigo: artigo (código), descricao, quant, total,
+      total_com_iva, grupo, grupo_descricao
+
+    Paginação (client-side):
     - pagina: número da página (default 1)
     - itens_por_pagina: itens por página (default 50, max 200)
 
-    O campo _paginacao indica total_itens e total_paginas.
+    Retorna (JSON):
+    - dados: lista (conforme modo acima)
+    - _paginacao: {pagina, itens_por_pagina, total_itens, total_paginas}
+
+    Exemplo — vendas por grupo:
+        mapa_vendas_artigos(
+            da_data_hora="2026-01-01T00:00:00",
+            a_data_hora="2026-03-31T23:59:59",
+            modo="grupo",
+        )
+
+    Exemplo — vendas do grupo BEBIDAS por artigo:
+        mapa_vendas_artigos(
+            da_data_hora="2026-01-01T00:00:00",
+            a_data_hora="2026-03-31T23:59:59",
+            modo="resumo",
+            grupo_codigo="BEBIDAS",
+        )
     """
     if modo == "grupo":
         payload: dict = {
@@ -297,10 +354,27 @@ async def mapa_volume_vendas(
       - "mes": vendas por mês (requer do_mes, ao_mes, ano)
       - "vendedor": vendas por vendedor (requer da_data, a_data; opcional: vendedor)
       - "posto": vendas por posto (requer da_data, a_data; opcional: posto)
-      - "estabelecimento": vendas por estabelecimento (requer da_data, a_data; opcional: estabelecimento)
-      - "comparacao_anual": comparação de dois anos (requer ano1, ano2; opcional: periodo_analise 1=até data sistema, 2=ano completo)
+      - "estabelecimento": por estabelecimento (requer da_data, a_data)
+      - "comparacao_anual": comparar dois anos (requer ano1, ano2;
+        opcional: periodo_analise 1=até data sistema, 2=ano completo)
 
-    Devolve dados de volume com valores com e sem IVA.
+    Retorna (JSON) — lista de registos com valores com e sem IVA.
+    Os campos variam por dimensão, mas incluem tipicamente:
+    - total_com_iva, total_sem_iva, total_iva
+    - Chave da dimensão: data, mes, vendedor_codigo, posto, estabelecimento, etc.
+
+    Exemplo — vendas diárias num período:
+        mapa_volume_vendas(
+            dimensao="data",
+            da_data="2026-01-01",
+            a_data="2026-01-31",
+        )
+
+    Exemplo — vendas mensais de um ano:
+        mapa_volume_vendas(dimensao="mes", do_mes=1, ao_mes=12, ano=2026)
+
+    Exemplo — comparação entre dois anos:
+        mapa_volume_vendas(dimensao="comparacao_anual", ano1=2026, ano2=2025)
     """
     if dimensao == "data":
         payload = {"da_data": da_data, "a_data": a_data}
@@ -326,7 +400,9 @@ async def mapa_volume_vendas(
         payload = {"da_data": da_data, "a_data": a_data}
         if estabelecimento is not None:
             payload["estabelecimento"] = estabelecimento
-        data = await client.post_old("/mapaVolumeVendasPorEstabelecimento", json=payload)
+        data = await client.post_old(
+            "/mapaVolumeVendasPorEstabelecimento", json=payload
+        )
 
     elif dimensao == "comparacao_anual":
         payload = {

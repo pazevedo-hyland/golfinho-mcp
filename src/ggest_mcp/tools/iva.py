@@ -16,14 +16,24 @@ async def list_ivas(
     """Consultar taxas de IVA, motivos de isenção e regimes de IVA.
 
     Parâmetro 'tipo' (opcional):
-    - "taxas" (default): lista as taxas de IVA (código, taxa, tipo, regime)
-    - "isencoes": lista os motivos de isenção de IVA (código, descrição, norma)
-    - "regimes": lista os regimes de IVA (código, descrição, dedução, bens usados)
+    - "taxas" (default): lista as taxas de IVA
+    - "isencoes": lista os motivos de isenção de IVA
+    - "regimes": lista os regimes de IVA
     - "todos": devolve as três listas combinadas num objeto
 
-    Exemplos de uso:
-    - "Qual a taxa de IVA normal?" → list_ivas(tipo="taxas")
-    - "Que motivos de isenção existem?" → list_ivas(tipo="isencoes")
+    Retorna (JSON):
+    - tipo="taxas": lista com {codigo, descricao, taxa, tipo, regime}
+      O campo 'codigo' (int) é o valor a usar em cod_iva nas linhas de
+      gravar_documento e gravar_recibo.
+    - tipo="isencoes": lista com {codigo, descricao, norma_legal}
+    - tipo="regimes": lista com {codigo, descricao, deducao, bens_usados}
+    - tipo="todos": {taxas_iva: [...], isencoes_iva: [...], regimes_iva: [...]}
+
+    Exemplos:
+        list_ivas()                    # taxas de IVA (default)
+        list_ivas(tipo="taxas")        # mesma coisa, explícito
+        list_ivas(tipo="isencoes")     # motivos de isenção
+        list_ivas(tipo="todos")        # tudo de uma vez
     """
     tipo = (tipo or "taxas").lower()
 

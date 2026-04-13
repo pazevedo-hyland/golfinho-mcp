@@ -40,14 +40,23 @@ async def gravar_documento(
     guias de transporte, faturas de compra, etc. O tipo é determinado
     pelo parâmetro 'codigo' (código do tipo de documento).
 
+    ╔══ WORKFLOW RECOMENDADO (antes de chamar esta tool) ══╗
+    ║ 1. lookup_entity("documentos") → tipos de doc válidos (FT, OR, GT…)  ║
+    ║ 2. lookup_entity("series")     → séries disponíveis (ex: "2026")     ║
+    ║ 3. list_ivas(tipo="taxas")     → códigos de IVA (campo cod_iva)      ║
+    ║ 4. lookup_entity("tipos_pagamento") → formas de pagamento (NUM, TB…) ║
+    ║ 5. get_artigo(codigo)          → confirmar código e preço do artigo  ║
+    ╚══════════════════════════════════════════════════════════════════════╝
+
     Parâmetros obrigatórios:
     - codigo: código do tipo de documento. Exemplos comuns:
-        "FT" = Fatura
-        "FS" = Fatura Simplificada
+        "FT" = Fatura  (pode exigir dados de transporte em certas séries)
+        "FR" = Fatura-Recibo  (fatura + pagamento imediato — mais simples)
+        "FS" = Fatura Simplificada  (exige NIF válido no cliente)
         "NC" = Nota de Crédito
         "OR" = Orçamento
         "FP" = Fatura Pro Forma
-        "GT" = Guia de Transporte
+        "GT" = Guia de Transporte  (requer matricula + moradas)
         "FC" = Fatura de Compra
       (usar lookup_entity("documentos") para ver todos os tipos disponíveis)
     - entidade_codigo: código numérico do cliente/fornecedor
@@ -67,19 +76,26 @@ async def gravar_documento(
 
     Linhas do documento (lista de dicts):
     - linhas: cada linha deve ter pelo menos:
-        - artigo: código do artigo
-        - quantidade: quantidade
-        - preco: preço unitário
+        - artigo: código do artigo (str)
+        - quantidade: quantidade (float)
+        - preco: preço unitário (float)
+        - descricao: descrição da linha (str, mínimo 2 caracteres — obrigatório)
       Opcionais por linha:
-        - cod_iva: código da taxa IVA (se diferente do default do artigo)
+        - cod_iva: código da taxa IVA (int — se omitido usa o default do artigo;
+          obter códigos válidos com list_ivas())
         - armazem: código do armazém
         - desc_lin_per1..5: descontos percentuais por linha (1 a 5)
         - movstock: se movimenta stock (bool)
+      Nota: data_mov é preenchido automaticamente — não é preciso enviar.
 
-    Formas de pagamento (lista de dicts):
+    Formas de pagamento (lista de dicts) — obrigatório para vendas a pronto:
     - formas_pag: cada forma deve ter:
-        - tipo: código do tipo de pagamento (ex: "NU" = numerário)
-        - valor: montante pago nessa forma
+        - tipo: código do tipo de pagamento
+          (usar lookup_entity("tipos_pagamento") para ver códigos válidos;
+           exemplos comuns: "NUM" = numerário, "TRFB" = transferência,
+           "MB" = multibanco, "CC" = cartão crédito)
+        - valor: montante pago nessa forma (float)
+      Se omitido, o documento fica a crédito (conta corrente).
 
     Campos de transporte (para guias GT):
     - matricula: matrícula do veículo
@@ -88,14 +104,44 @@ async def gravar_documento(
 
     - extras: dict com campos avançados não listados acima
 
-    Exemplo — fatura simples:
+    Retorna (JSON):
+        {"doc_codigo": "FT", "doc_numero": 123, "doc_serie": "2026",
+         "doc_ano": 2026, "doc_entidade": 1}
+    ou mensagem de sucesso se a API não devolver corpo.
+
+    ⚠ Notas importantes:
+    - O campo 'descricao' em cada linha é frequentemente obrigatório (mín. 2
+      caracteres) — a API rejeita sem ele.
+    - Fatura Simplificada (FS) exige NIF válido configurado no cliente.
+    - Fatura (FT) pode exigir dados de transporte conforme a série — se só
+      precisa de uma venda simples, prefira FR (Fatura-Recibo).
+    - Mensagens de erro da API podem aparecer em francês (backend WinDev).
+
+    Exemplo — fatura a crédito:
         gravar_documento(
             codigo="FT",
             entidade_codigo=1,
             posto=1,
             linhas=[
-                {"artigo": "CAFE-001", "quantidade": 10, "preco": 1.20},
-                {"artigo": "BOLO-002", "quantidade": 5, "preco": 2.50},
+                {"artigo": "CAFE-001", "descricao": "Café Expresso",
+                 "quantidade": 10, "preco": 1.20},
+                {"artigo": "BOLO-002", "descricao": "Bolo de Chocolate",
+                 "quantidade": 5, "preco": 2.50},
+            ],
+        )
+
+    Exemplo — fatura a pronto (com pagamento imediato em numerário):
+        gravar_documento(
+            codigo="FR",
+            entidade_codigo=1,
+            posto=1,
+            serie="2026",
+            linhas=[
+                {"artigo": "CAFE-001", "descricao": "Café Expresso",
+                 "quantidade": 10, "preco": 1.20, "cod_iva": 23},
+            ],
+            formas_pag=[
+                {"tipo": "NUM", "valor": 14.76},
             ],
         )
 
@@ -108,8 +154,8 @@ async def gravar_documento(
             vendedor=3,
             observacao="Válido por 30 dias",
             linhas=[
-                {"artigo": "SERV-010", "quantidade": 1, "preco": 500.00,
-                 "desc_lin_per1": 10},
+                {"artigo": "SERV-010", "descricao": "Consultoria IT",
+                 "quantidade": 1, "preco": 500.00, "desc_lin_per1": 10},
             ],
         )
 
@@ -124,7 +170,8 @@ async def gravar_documento(
             data_descarga="2026-04-15",
             morada_descarga="Av. do Cliente, 20, Porto",
             linhas=[
-                {"artigo": "PROD-100", "quantidade": 50, "preco": 10.00},
+                {"artigo": "PROD-100", "descricao": "Widget Industrial",
+                 "quantidade": 50, "preco": 10.00},
             ],
         )
     """
@@ -155,6 +202,7 @@ async def gravar_documento(
     if linhas is not None:
         # Auto-fill data_mov on lines if missing (API requires it)
         from datetime import datetime
+
         default_dt = data_doc or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
         for linha in linhas:
             if "data_mov" not in linha:
@@ -179,7 +227,11 @@ async def gravar_documento(
         payload.update(extras)
 
     data = await client.post_old("/gravarDocumento", json=payload)
-    return json.dumps(data, ensure_ascii=False, default=str) if data else "Documento gravado com sucesso."
+    return (
+        json.dumps(data, ensure_ascii=False, default=str)
+        if data
+        else "Documento gravado com sucesso."
+    )
 
 
 @mcp.tool()
@@ -200,54 +252,72 @@ async def gravar_recibo(
     """Criar um recibo (pagamento) no gGest.
 
     Um recibo liquida um ou mais documentos pendentes de um cliente.
-    Workflow típico:
-    1. Chamar get_pendentes_recibo(cliente, moeda) para obter os documentos em aberto
-    2. Chamar gravar_recibo() com as linhas dos documentos a liquidar
+
+    ╔══ WORKFLOW RECOMENDADO (3 passos) ══╗
+    ║ 1. get_pendentes_recibo(cliente=X, moeda="EUR")                   ║
+    ║    → obtém lista de docs pendentes com: codigo, numero, serie,   ║
+    ║      ano, total_documento, total_liquidado                       ║
+    ║ 2. Escolher quais documentos liquidar e calcular valores         ║
+    ║ 3. gravar_recibo() com as linhas e formas_pag correspondentes   ║
+    ╚════════════════════════════════════════════════════════════════╝
 
     Parâmetros obrigatórios:
-    - codigo: código do tipo de recibo (ex: "RC" — usar lookup_entity("documentos")
-      para ver tipos disponíveis)
+    - codigo: código do tipo de recibo — depende da configuração da BD.
+      Usar lookup_entity("documentos") para ver tipos disponíveis.
+      Exemplos comuns: "RC" (Recibo Cliente), "RCLI" (Recibo)
     - entidade: código numérico do cliente
     - posto: código do posto/caixa (ex: 1)
     - moeda: código da moeda (default: "EUR")
 
     Parâmetros opcionais:
-    - serie: código da série documental
+    - serie: código da série documental (ex: "2026")
     - data_doc: data do recibo (formato "YYYY-MM-DD")
     - observacao: texto livre
     - valor_por_conta: valor parcial por conta (quando não se liquida a totalidade)
     - processamento: tipo de processamento (int)
 
     Linhas — documentos a liquidar (lista de dicts):
-    - linhas: cada linha identifica um documento pendente:
+    - linhas: cada linha identifica um documento pendente (usar dados de
+      get_pendentes_recibo):
         - codigo: código do tipo de documento original (ex: "FT")
-        - numero: número do documento
-        - serie: série do documento
-        - ano: ano do documento
-        - valor_liquidar: montante a liquidar deste documento
-        - valor_desconto: desconto financeiro aplicado (opcional)
+        - numero: número do documento (int)
+        - serie: série do documento (str)
+        - ano: ano do documento (int)
+        - valor_liquidar: montante a liquidar deste documento (float)
+        - valor_desconto: desconto financeiro aplicado (float, opcional)
 
     Formas de pagamento (lista de dicts):
     - formas_pag: cada forma deve ter:
-        - tipo: código do tipo de pagamento (ex: "NU" = numerário, "TB" = transferência)
-        - valor: montante pago nessa forma
+        - tipo: código do tipo de pagamento
+          (usar lookup_entity("tipos_pagamento") para ver códigos válidos;
+           exemplos: "NUM" = numerário, "TRFB" = transferência,
+           "MB" = multibanco, "CC" = cartão crédito)
+        - valor: montante pago nessa forma (float)
+      A soma dos valores deve igualar a soma dos valor_liquidar.
 
     - extras: dict com campos avançados não listados acima
 
+    Retorna (JSON):
+        {"doc_codigo": "RC", "doc_numero": 45, "doc_serie": "2026",
+         "doc_ano": 2026, "doc_entidade": 1}
+    ou mensagem de sucesso se a API não devolver corpo.
+
     Exemplo — recibo simples por transferência:
-        # Primeiro: obter pendentes
+        # Passo 1: obter pendentes
         pendentes = get_pendentes_recibo(cliente=1)
-        # Depois: liquidar a fatura FT nº 100
+        # Passo 2: escolher a fatura FT nº 100 (valor 150.00€)
+        # Passo 3: liquidar
         gravar_recibo(
             codigo="RC",
             entidade=1,
             posto=1,
+            serie="2026",
             linhas=[
                 {"codigo": "FT", "numero": 100, "serie": "2026", "ano": 2026,
                  "valor_liquidar": 150.00},
             ],
             formas_pag=[
-                {"tipo": "TB", "valor": 150.00},
+                {"tipo": "TRFB", "valor": 150.00},
             ],
         )
     """
@@ -275,4 +345,8 @@ async def gravar_recibo(
         payload.update(extras)
 
     data = await client.post_old("/gravarRecibo", json=payload)
-    return json.dumps(data, ensure_ascii=False, default=str) if data else "Recibo gravado com sucesso."
+    return (
+        json.dumps(data, ensure_ascii=False, default=str)
+        if data
+        else "Recibo gravado com sucesso."
+    )

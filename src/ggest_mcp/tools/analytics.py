@@ -144,8 +144,17 @@ async def top_clientes_revenue(
     - a_data: data fim (ISO8601, ex: "2025-12-31")
     - top_n: número de clientes a mostrar (default 20, max 100)
 
-    Devolve lista ordenada com: código, nome, NIF, total facturado,
-    total IVA, nº documentos, e % do total geral.
+    Retorna (JSON):
+    - clientes: lista ordenada, cada um com:
+        - codigo, descricao (nome), contribuinte (NIF)
+        - total_facturado, total_iva, n_documentos
+        - percentagem_total (% deste cliente no total geral)
+    - total_geral: soma de todas as vendas no período
+    - total_clientes_com_vendas: nº de clientes distintos
+    - periodo: {de, ate}
+
+    Exemplo:
+        top_clientes_revenue(da_data="2026-01-01", a_data="2026-12-31", top_n=10)
     """
     top_n = max(1, min(top_n, 100))
     da = f"{da_data}T00:00:00"
@@ -153,13 +162,23 @@ async def top_clientes_revenue(
 
     clients = await _aggregate_by_client(da, a)
     if not clients:
-        return json.dumps({"clientes": [], "total_geral": 0, "periodo": {"de": da_data, "ate": a_data}})
+        return json.dumps(
+            {
+                "clientes": [],
+                "total_geral": 0,
+                "periodo": {"de": da_data, "ate": a_data},
+            }
+        )
 
     total_geral = sum(c["total_facturado"] for c in clients.values())
-    ranked = sorted(clients.values(), key=lambda c: c["total_facturado"], reverse=True)[:top_n]
+    ranked = sorted(clients.values(), key=lambda c: c["total_facturado"], reverse=True)[
+        :top_n
+    ]
 
     for c in ranked:
-        c["percentagem_total"] = round(c["total_facturado"] / total_geral * 100, 1) if total_geral else 0
+        c["percentagem_total"] = (
+            round(c["total_facturado"] / total_geral * 100, 1) if total_geral else 0
+        )
         c["total_facturado"] = round(c["total_facturado"], 2)
         c["total_iva"] = round(c["total_iva"], 2)
 
@@ -194,11 +213,17 @@ async def analise_cliente(
     - a_data: data fim (ISO8601, ex: "2025-12-31")
     - top_n_artigos: quantos artigos mostrar no ranking (default 10)
 
-    Devolve:
-    - Dados do cliente (nome, NIF, grupo, vendedor, limite crédito, estado cobrança)
-    - Revenue total e nº documentos no período
-    - Top artigos comprados (código, descrição, quantidade, total)
-    - Saldo pendente (documentos por pagar)
+    Retorna (JSON):
+    - cliente: {codigo, descricao, contribuinte, grupo, vendedor,
+      limite_credito, estado_cobranca (Normal/Difícil/Incobrável)}
+    - periodo: {de, ate}
+    - revenue: {total_facturado, n_documentos}
+    - top_artigos: lista com {artigo, descricao, quantidade,
+      total_com_iva, grupo}
+    - saldo_pendente: {total, n_documentos_pendentes}
+
+    Exemplo:
+        analise_cliente(cliente=42, da_data="2026-01-01", a_data="2026-12-31")
     """
     top_n_artigos = max(1, min(top_n_artigos, 50))
     da = f"{da_data}T00:00:00"
@@ -210,15 +235,24 @@ async def analise_cliente(
         return resp.get("data", resp) if isinstance(resp, dict) else resp
 
     async def _fetch_artigos():
-        data = await client.post_old("/mapaVendasArtigosPorGrupo", json={
-            "Da_data_hora": da,
-            "A_data_hora": a,
-            "cliente": cliente,
-            "incluir_IVA": True,
-            "somente_quantidades_superior_zero": True,
-            "incluir_descontos_cabecalho": True,
-        })
-        return data.get("dados", []) if isinstance(data, dict) else data if isinstance(data, list) else []
+        data = await client.post_old(
+            "/mapaVendasArtigosPorGrupo",
+            json={
+                "Da_data_hora": da,
+                "A_data_hora": a,
+                "cliente": cliente,
+                "incluir_IVA": True,
+                "somente_quantidades_superior_zero": True,
+                "incluir_descontos_cabecalho": True,
+            },
+        )
+        return (
+            data.get("dados", [])
+            if isinstance(data, dict)
+            else data
+            if isinstance(data, list)
+            else []
+        )
 
     async def _fetch_pendentes():
         try:
@@ -239,7 +273,9 @@ async def analise_cliente(
     )
 
     # Ordenar por total e pegar top N
-    artigos_sorted = sorted(artigos_list, key=lambda a: a.get("total_com_iva", 0) or 0, reverse=True)[:top_n_artigos]
+    artigos_sorted = sorted(
+        artigos_list, key=lambda a: a.get("total_com_iva", 0) or 0, reverse=True
+    )[:top_n_artigos]
 
     total_facturado = sum(d.get("total_documento", 0) or 0 for d in docs)
     n_docs = len(docs)
@@ -259,7 +295,9 @@ async def analise_cliente(
             "grupo": ficha.get("grupo"),
             "vendedor": ficha.get("vendedor"),
             "limite_credito": ficha.get("limitecredito"),
-            "estado_cobranca": difi_map.get(ficha.get("difi_cobranca", 0), "Desconhecido"),
+            "estado_cobranca": difi_map.get(
+                ficha.get("difi_cobranca", 0), "Desconhecido"
+            ),
         },
         "periodo": {"de": da_data, "ate": a_data},
         "revenue": {
@@ -298,19 +336,28 @@ async def resumo_financeiro(
 ) -> str:
     """Dashboard financeiro do negócio — resumo completo num só call.
 
-    Agrega internamente vários relatórios e devolve:
-    - Revenue mensal do ano
-    - Comparação com ano anterior (se pedido)
-    - Top artigos mais vendidos
-    - Top clientes por facturação
-    - Idade de saldos (receivables aging)
-    - Revenue por vendedor
+    Agrega internamente vários relatórios e devolve um dashboard compacto.
 
     Parâmetros:
-    - ano: ano a analisar (ex: 2025)
+    - ano: ano a analisar (ex: 2026)
     - ano_anterior: ano de comparação (default: ano-1)
     - top_n_artigos: quantos artigos no ranking (default 20)
     - top_n_clientes: quantos clientes no ranking (default 10)
+
+    Retorna (JSON):
+    - ano, revenue_total, total_clientes_ativos
+    - revenue_mensal: dados do mapa de volume de vendas por mês
+    - comparacao_anual: {ano_atual, ano_anterior, dados}
+    - top_artigos: ranking dos artigos mais vendidos
+    - top_clientes: ranking dos clientes por faturação, cada um com:
+        - codigo, descricao, total_facturado, total_iva, n_documentos,
+          percentagem_total
+    - idade_saldos: aging report (saldos por antiguidade)
+    - revenue_por_vendedor: vendas agrupadas por vendedor
+
+    Exemplo:
+        resumo_financeiro(ano=2026)
+        resumo_financeiro(ano=2026, ano_anterior=2024, top_n_artigos=10)
     """
     top_n_artigos = max(1, min(top_n_artigos, 50))
     top_n_clientes = max(1, min(top_n_clientes, 50))
@@ -319,26 +366,49 @@ async def resumo_financeiro(
     # ── Define all data-fetch coroutines ──────────────────────────────────
 
     async def _fetch_volume_mensal():
-        return await client.post_old("/mapaVolumeVendasPorMes", json={
-            "do_mes": 1, "ao_mes": 12, "ano": ano,
-        })
+        return await client.post_old(
+            "/mapaVolumeVendasPorMes",
+            json={
+                "do_mes": 1,
+                "ao_mes": 12,
+                "ano": ano,
+            },
+        )
 
     async def _fetch_comparacao():
-        return await client.post_old("/mapaComparacaoAnualVolumeVendas", json={
-            "ano1": ano, "ano2": ano_ant, "periodo_analise": 2,
-        })
+        return await client.post_old(
+            "/mapaComparacaoAnualVolumeVendas",
+            json={
+                "ano1": ano,
+                "ano2": ano_ant,
+                "periodo_analise": 2,
+            },
+        )
 
     async def _fetch_top_artigos():
         """Monthly batching + gather for top artigos."""
+
         async def _one(start: str, end: str):
             async with _get_sem():
-                chunk = await client.post_old("/mapaTopArtigosMaisVendidos", json={
-                    "da_data": start, "a_data": end,
-                    "numero_artigos": top_n_artigos,
-                    "total_ou_quantidade": "T", "total_com_iva": True,
-                })
-                items = chunk.get("dados", chunk) if isinstance(chunk, dict) else chunk if isinstance(chunk, list) else []
+                chunk = await client.post_old(
+                    "/mapaTopArtigosMaisVendidos",
+                    json={
+                        "da_data": start,
+                        "a_data": end,
+                        "numero_artigos": top_n_artigos,
+                        "total_ou_quantidade": "T",
+                        "total_com_iva": True,
+                    },
+                )
+                items = (
+                    chunk.get("dados", chunk)
+                    if isinstance(chunk, dict)
+                    else chunk
+                    if isinstance(chunk, list)
+                    else []
+                )
                 return items
+
         results = await asyncio.gather(*[_one(s, e) for s, e in _monthly_ranges(ano)])
         return _merge_top_artigos([i for sub in results for i in sub], top_n_artigos)
 
@@ -348,27 +418,50 @@ async def resumo_financeiro(
         )
 
     async def _fetch_idade_saldos():
-        return await client.post_old("/mapaIdadeSaldosClientes", json={
-            "cobranca_normal": True, "cobranca_em_dificuldade": True,
-            "cobranca_incobravel": True, "incluir_entidades_inativas": False,
-        })
+        return await client.post_old(
+            "/mapaIdadeSaldosClientes",
+            json={
+                "cobranca_normal": True,
+                "cobranca_em_dificuldade": True,
+                "cobranca_incobravel": True,
+                "incluir_entidades_inativas": False,
+            },
+        )
 
     async def _fetch_volume_vendedor():
         """Monthly batching + gather for vendedor."""
+
         async def _one(start: str, end: str):
             async with _get_sem():
-                chunk = await client.post_old("/mapaVolumeVendasPorVendedor", json={
-                    "da_data": start, "a_data": end,
-                })
-                items = chunk.get("dados", chunk) if isinstance(chunk, dict) else chunk if isinstance(chunk, list) else []
+                chunk = await client.post_old(
+                    "/mapaVolumeVendasPorVendedor",
+                    json={
+                        "da_data": start,
+                        "a_data": end,
+                    },
+                )
+                items = (
+                    chunk.get("dados", chunk)
+                    if isinstance(chunk, dict)
+                    else chunk
+                    if isinstance(chunk, list)
+                    else []
+                )
                 return items
+
         results = await asyncio.gather(*[_one(s, e) for s, e in _monthly_ranges(ano)])
         return [i for sub in results for i in sub]
 
     # ── Run all 6 blocks concurrently ─────────────────────────────────────
 
-    (volume_mensal, comparacao, top_artigos,
-     clients, idade_saldos, volume_vendedor) = await asyncio.gather(
+    (
+        volume_mensal,
+        comparacao,
+        top_artigos,
+        clients,
+        idade_saldos,
+        volume_vendedor,
+    ) = await asyncio.gather(
         _fetch_volume_mensal(),
         _fetch_comparacao(),
         _fetch_top_artigos(),
@@ -380,9 +473,13 @@ async def resumo_financeiro(
     # ── Post-process client ranking ───────────────────────────────────────
 
     total_revenue = sum(c["total_facturado"] for c in clients.values())
-    top_clients = sorted(clients.values(), key=lambda c: c["total_facturado"], reverse=True)[:top_n_clientes]
+    top_clients = sorted(
+        clients.values(), key=lambda c: c["total_facturado"], reverse=True
+    )[:top_n_clientes]
     for c in top_clients:
-        c["percentagem_total"] = round(c["total_facturado"] / total_revenue * 100, 1) if total_revenue else 0
+        c["percentagem_total"] = (
+            round(c["total_facturado"] / total_revenue * 100, 1) if total_revenue else 0
+        )
         c["total_facturado"] = round(c["total_facturado"], 2)
         c["total_iva"] = round(c["total_iva"], 2)
 
@@ -418,15 +515,29 @@ async def analise_rentabilidade(
 ) -> str:
     """Análise de rentabilidade por produto — cruza vendas com margens.
 
-    Para cada artigo vendido no período, mostra:
-    - Quantidade vendida e total facturado
-    - Preço médio de venda
-    - Margem de lucro (dos dados do artigo, se disponível)
+    Para cada artigo vendido no período, mostra vendas e margens.
 
     Parâmetros:
     - da_data / a_data: período (ISO8601, ex: "2025-01-01" / "2025-12-31")
-    - grupo: filtrar por grupo de artigos (opcional)
+    - grupo: filtrar por grupo de artigos (opcional — código do grupo)
     - top_n: quantos artigos mostrar (default 30, max 100)
+
+    Retorna (JSON):
+    - periodo: {de, ate}
+    - total_vendas_sem_iva: soma total das vendas sem IVA
+    - artigos: lista, cada um com:
+        - artigo (código), descricao, grupo, grupo_descricao
+        - quantidade: total vendido no período
+        - total_sem_iva: valor total de vendas sem IVA
+        - preco_medio: preço médio de venda
+        - pvp1: preço de tabela (se disponível da ficha do artigo)
+        - lucro1: margem de lucro configurada (se disponível)
+        - margem_lucro_sobre: base da margem (se disponível)
+
+    Exemplo:
+        analise_rentabilidade(da_data="2026-01-01", a_data="2026-06-30")
+        analise_rentabilidade(da_data="2026-01-01", a_data="2026-06-30",
+                             grupo="BEBIDAS", top_n=10)
     """
     top_n = max(1, min(top_n, 100))
     da = f"{da_data}T00:00:00"
@@ -442,10 +553,18 @@ async def analise_rentabilidade(
     if grupo:
         payload["grupo_codigo"] = grupo
     vendas = await client.post_old("/mapaVendasArtigosResumo", json=payload)
-    vendas_list = vendas.get("dados", []) if isinstance(vendas, dict) else vendas if isinstance(vendas, list) else []
+    vendas_list = (
+        vendas.get("dados", [])
+        if isinstance(vendas, dict)
+        else vendas
+        if isinstance(vendas, list)
+        else []
+    )
 
     # Sort by total descending
-    vendas_sorted = sorted(vendas_list, key=lambda v: v.get("total", 0) or 0, reverse=True)[:top_n]
+    vendas_sorted = sorted(
+        vendas_list, key=lambda v: v.get("total", 0) or 0, reverse=True
+    )[:top_n]
 
     # 2) For each top article, fetch margin data concurrently
     async def _enrich(v: dict) -> dict:
@@ -468,7 +587,11 @@ async def analise_rentabilidade(
         try:
             async with _get_sem():
                 ficha_resp = await client.get_v1(f"/artigos/{art_code}")
-            ficha = ficha_resp.get("data", ficha_resp) if isinstance(ficha_resp, dict) else ficha_resp
+            ficha = (
+                ficha_resp.get("data", ficha_resp)
+                if isinstance(ficha_resp, dict)
+                else ficha_resp
+            )
             entry["pvp1"] = ficha.get("pvp1")
             entry["lucro1"] = ficha.get("lucro1")
             entry["margem_lucro_sobre"] = ficha.get("margem_lucro_sobre")
@@ -495,55 +618,88 @@ async def analise_rentabilidade(
 
 @mcp.tool()
 async def analise_cobranca() -> str:
-    """Análise de risco de cobrança — clientes com saldos vencidos e dificuldade de cobrança.
+    """Análise de risco de cobrança — clientes com saldos vencidos.
 
-    Combina:
-    - Idade de saldos (aging buckets: não vencidos, <30d, 30-60d, 61-90d, >90d)
-    - Lista de clientes com estado de cobrança difícil ou incobrável
-    - Extrato resumido dos clientes em risco
-
+    Combina aging report com dados de cobrança difícil/incobrável.
     Não requer parâmetros — analisa o estado atual.
 
-    Devolve:
-    - Resumo global de aging
-    - Lista de clientes em cobrança difícil/incobrável com saldos
+    Retorna (JSON):
+    - idade_saldos: aging report global (mesma estrutura de mapa_idade_saldos)
+    - clientes_em_risco:
+        - total: nº de clientes em cobrança difícil/incobrável
+        - detalhes: lista, cada um com:
+            - codigo, descricao, contribuinte
+            - estado_cobranca ("Difícil" ou "Incobrável")
+            - limite_credito, vendedor
+            - saldo_pendente: valor total em dívida (€)
+            - n_docs_pendentes: nº de documentos por pagar
+
+    Exemplo:
+        analise_cobranca()
     """
+
     # 1) Aging global + client list concurrently
     async def _fetch_aging():
-        return await client.post_old("/mapaIdadeSaldosClientes", json={
-            "cobranca_normal": True, "cobranca_em_dificuldade": True,
-            "cobranca_incobravel": True, "incluir_entidades_inativas": False,
-        })
+        return await client.post_old(
+            "/mapaIdadeSaldosClientes",
+            json={
+                "cobranca_normal": True,
+                "cobranca_em_dificuldade": True,
+                "cobranca_incobravel": True,
+                "incluir_entidades_inativas": False,
+            },
+        )
 
     async def _fetch_clientes():
         return await client.get_v1("/clientes")
 
-    idade_saldos, clientes_data = await asyncio.gather(_fetch_aging(), _fetch_clientes())
+    idade_saldos, clientes_data = await asyncio.gather(
+        _fetch_aging(), _fetch_clientes()
+    )
 
-    clientes_list = clientes_data if isinstance(clientes_data, list) else clientes_data.get("dados", []) if isinstance(clientes_data, dict) else []
+    clientes_list = (
+        clientes_data
+        if isinstance(clientes_data, list)
+        else clientes_data.get("dados", [])
+        if isinstance(clientes_data, dict)
+        else []
+    )
 
     difi_map = {0: "Normal", 1: "Difícil", 2: "Incobrável"}
     clientes_risco = []
     for cl in clientes_list:
         difi = cl.get("difi_cobranca", 0) or 0
         if difi > 0:
-            clientes_risco.append({
-                "codigo": cl.get("codigo"),
-                "descricao": cl.get("descricao"),
-                "contribuinte": cl.get("contribuinte"),
-                "estado_cobranca": difi_map.get(difi, str(difi)),
-                "limite_credito": cl.get("limitecredito"),
-                "vendedor": cl.get("vendedor"),
-            })
+            clientes_risco.append(
+                {
+                    "codigo": cl.get("codigo"),
+                    "descricao": cl.get("descricao"),
+                    "contribuinte": cl.get("contribuinte"),
+                    "estado_cobranca": difi_map.get(difi, str(difi)),
+                    "limite_credito": cl.get("limitecredito"),
+                    "vendedor": cl.get("vendedor"),
+                }
+            )
 
     # 2) Fetch pending amounts for risk clients concurrently
     async def _fetch_pending(cr: dict) -> None:
         try:
             async with _get_sem():
                 pendentes = await client.get_old(f"/pendentesRecibo/{cr['codigo']}/EUR")
-            plist = pendentes if isinstance(pendentes, list) else pendentes.get("dados", []) if isinstance(pendentes, dict) else []
+            plist = (
+                pendentes
+                if isinstance(pendentes, list)
+                else pendentes.get("dados", [])
+                if isinstance(pendentes, dict)
+                else []
+            )
             cr["saldo_pendente"] = round(
-                sum((p.get("total_documento", 0) or 0) - (p.get("total_liquidado", 0) or 0) for p in plist), 2
+                sum(
+                    (p.get("total_documento", 0) or 0)
+                    - (p.get("total_liquidado", 0) or 0)
+                    for p in plist
+                ),
+                2,
             )
             cr["n_docs_pendentes"] = len(plist)
         except Exception:
@@ -584,10 +740,20 @@ async def comparacao_periodos(
     - periodo2_de / periodo2_ate: segundo período
     - top_n_artigos: quantos artigos mostrar em cada período (default 10)
 
-    Devolve para cada período:
-    - Total facturado, nº documentos, ticket médio
-    - Top artigos
-    - Variação % entre períodos
+    Retorna (JSON):
+    - periodo_1 e periodo_2, cada um com:
+        - periodo: {de, ate}
+        - total_facturado, n_documentos, ticket_medio
+        - top_artigos: ranking dos mais vendidos
+    - variacao: variação % entre períodos:
+        - total_facturado_pct, n_documentos_pct, ticket_medio_pct
+        (positivo = período 1 superior; negativo = período 2 superior)
+
+    Exemplo — comparar Q1 de dois anos:
+        comparacao_periodos(
+            periodo1_de="2026-01-01", periodo1_ate="2026-03-31",
+            periodo2_de="2025-01-01", periodo2_ate="2025-03-31",
+        )
     """
     top_n_artigos = max(1, min(top_n_artigos, 50))
 
@@ -600,13 +766,16 @@ async def comparacao_periodos(
         n_docs = len(docs)
         ticket_medio = round(total / n_docs, 2) if n_docs else 0
 
-        top = await client.post_old("/mapaTopArtigosMaisVendidos", json={
-            "da_data": de,
-            "a_data": ate,
-            "numero_artigos": top_n_artigos,
-            "total_ou_quantidade": "T",
-            "total_com_iva": True,
-        })
+        top = await client.post_old(
+            "/mapaTopArtigosMaisVendidos",
+            json={
+                "da_data": de,
+                "a_data": ate,
+                "numero_artigos": top_n_artigos,
+                "total_ou_quantidade": "T",
+                "total_com_iva": True,
+            },
+        )
 
         return {
             "periodo": {"de": de, "ate": ate},
@@ -624,15 +793,24 @@ async def comparacao_periodos(
     # Calculate variation
     var_total = None
     if p2["total_facturado"]:
-        var_total = round((p1["total_facturado"] - p2["total_facturado"]) / p2["total_facturado"] * 100, 1)
+        var_total = round(
+            (p1["total_facturado"] - p2["total_facturado"])
+            / p2["total_facturado"]
+            * 100,
+            1,
+        )
 
     var_docs = None
     if p2["n_documentos"]:
-        var_docs = round((p1["n_documentos"] - p2["n_documentos"]) / p2["n_documentos"] * 100, 1)
+        var_docs = round(
+            (p1["n_documentos"] - p2["n_documentos"]) / p2["n_documentos"] * 100, 1
+        )
 
     var_ticket = None
     if p2["ticket_medio"]:
-        var_ticket = round((p1["ticket_medio"] - p2["ticket_medio"]) / p2["ticket_medio"] * 100, 1)
+        var_ticket = round(
+            (p1["ticket_medio"] - p2["ticket_medio"]) / p2["ticket_medio"] * 100, 1
+        )
 
     result = {
         "periodo_1": p1,

@@ -49,14 +49,18 @@ async def assistencia_tecnica(
 ) -> str:
     """Gestão de assistência técnica no gGest — pedidos, intervenções e ordens de serviço.
 
-    Uma tool multiplexada com 3 operações (parâmetro 'operacao'):
+    Uma tool multiplexada com 3 operações (parâmetro 'operacao').
+    Todas as operações retornam (JSON):
+        {"doc_codigo": "PA", "doc_numero": 7, "doc_serie": "2026",
+         "doc_ano": 2026, "doc_entidade": 42}
+    ou mensagem de sucesso se a API não devolver corpo.
 
     ━━━ operacao="pedido" ━━━
     Criar um pedido de assistência técnica.
-    API: POST /api/assistecPedidoAssistenciaNovo
 
     Parâmetros obrigatórios:
-    - codigo: código do tipo de pedido
+    - codigo: código do tipo de pedido (usar lookup_entity("documentos")
+      para ver tipos disponíveis)
     - entidade: código do cliente
     - posto: código do posto
 
@@ -86,13 +90,12 @@ async def assistencia_tecnica(
 
     ━━━ operacao="intervencao" ━━━
     Adicionar uma intervenção a um pedido de assistência existente.
-    API: POST /api/assistecPedidoAssistenciaIntervencaoNova
 
     Parâmetros obrigatórios:
-    - codigo: código do tipo de pedido
-    - numero: número do pedido existente
-    - serie: série do pedido
-    - ano: ano do pedido
+    - codigo: código do tipo de pedido (mesmo tipo do pedido original)
+    - numero: número do pedido existente (int)
+    - serie: série do pedido (str)
+    - ano: ano do pedido (int)
     - posto: código do posto
 
     Parâmetros opcionais:
@@ -101,8 +104,8 @@ async def assistencia_tecnica(
     - estado: novo estado do pedido (código numérico)
     - avaria_encontrada: diagnóstico real
     - reparacao_efetuada: trabalho realizado
-    - horas_gastas: horas de trabalho
-    - kms_percorridos: quilómetros deslocação
+    - horas_gastas: horas de trabalho (float)
+    - kms_percorridos: quilómetros deslocação (float)
     - observacao: notas adicionais
 
     Exemplo:
@@ -121,18 +124,19 @@ async def assistencia_tecnica(
         )
 
     ━━━ operacao="ordem_servico" ━━━
-    Criar uma ordem de serviço (documento faturável).
-    API: POST /api/assistecOrdemServicoNova
+    Criar uma ordem de serviço (documento faturável a partir da assistência).
 
     Parâmetros obrigatórios:
-    - codigo: código do tipo de ordem
+    - codigo: código do tipo de ordem (usar lookup_entity("documentos"))
     - entidade_codigo: código do cliente
     - moeda: código da moeda (ex: "EUR")
     - posto: código do posto
 
     Parâmetros opcionais:
-    - linhas: lista de artigos/serviços (estrutura igual a gravar_documento)
-      Cada linha: {"artigo": "...", "quantidade": N, "preco": X.XX}
+    - linhas: lista de artigos/serviços (estrutura igual a gravar_documento).
+      Cada linha: {"artigo": "...", "descricao": "...", "quantidade": N,
+                   "preco": X.XX}
+      Nota: data_mov é preenchido automaticamente — não é preciso enviar.
 
     Exemplo:
         assistencia_tecnica(
@@ -142,8 +146,10 @@ async def assistencia_tecnica(
             moeda="EUR",
             posto=1,
             linhas=[
-                {"artigo": "MO-001", "quantidade": 1.5, "preco": 35.00},
-                {"artigo": "FONTE-HP", "quantidade": 1, "preco": 45.00},
+                {"artigo": "MO-001", "descricao": "Mão de obra (hora)",
+                 "quantidade": 1.5, "preco": 35.00},
+                {"artigo": "FONTE-HP", "descricao": "Fonte de alimentação HP",
+                 "quantidade": 1, "preco": 45.00},
             ],
         )
     """
@@ -176,7 +182,11 @@ async def assistencia_tecnica(
             payload.update(extras)
 
         data = await client.post_old("/assistecPedidoAssistenciaNovo", json=payload)
-        return json.dumps(data, ensure_ascii=False, default=str) if data else "Pedido de assistência criado com sucesso."
+        return (
+            json.dumps(data, ensure_ascii=False, default=str)
+            if data
+            else "Pedido de assistência criado com sucesso."
+        )
 
     if operacao == "intervencao":
         if numero is None or serie is None or ano is None:
@@ -206,8 +216,14 @@ async def assistencia_tecnica(
         if extras:
             payload.update(extras)
 
-        data = await client.post_old("/assistecPedidoAssistenciaIntervencaoNova", json=payload)
-        return json.dumps(data, ensure_ascii=False, default=str) if data else "Intervenção adicionada com sucesso."
+        data = await client.post_old(
+            "/assistecPedidoAssistenciaIntervencaoNova", json=payload
+        )
+        return (
+            json.dumps(data, ensure_ascii=False, default=str)
+            if data
+            else "Intervenção adicionada com sucesso."
+        )
 
     if operacao == "ordem_servico":
         if entidade_codigo is None:
@@ -221,6 +237,7 @@ async def assistencia_tecnica(
         if linhas is not None:
             # Auto-fill data_mov on lines if missing (API requires it)
             from datetime import datetime
+
             default_dt = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
             for linha in linhas:
                 if "data_mov" not in linha:
@@ -230,7 +247,11 @@ async def assistencia_tecnica(
             payload.update(extras)
 
         data = await client.post_old("/assistecOrdemServicoNova", json=payload)
-        return json.dumps(data, ensure_ascii=False, default=str) if data else "Ordem de serviço criada com sucesso."
+        return (
+            json.dumps(data, ensure_ascii=False, default=str)
+            if data
+            else "Ordem de serviço criada com sucesso."
+        )
 
     tipos_validos = "pedido, intervencao, ordem_servico"
     return f"Operação '{operacao}' inválida. Operações válidas: {tipos_validos}"

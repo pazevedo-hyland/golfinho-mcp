@@ -17,12 +17,23 @@ async def list_clientes(
 ) -> str:
     """Pesquisar clientes no gGest.
 
-    Filtros opcionais:
-    - descricao: nome parcial do cliente
-    - contribuinte: NIF/contribuinte
+    Filtros opcionais (pelo menos um recomendado para limitar resultados):
+    - descricao: nome parcial do cliente (ex: "Silva")
+    - contribuinte: NIF/contribuinte (ex: "123456789")
     - telefone: número de telefone
+    Se nenhum filtro for passado, devolve todos os clientes.
 
-    Devolve lista de clientes com código, nome, NIF, morada, contactos.
+    Retorna (JSON) — lista de clientes, cada um com:
+    - codigo, descricao (nome), contribuinte (NIF)
+    - morada, morada2, codpostal, pais
+    - telefone1..4, telemovel1..4, email1..4, fax, web
+    - vendedor, moeda, prazo_pagamento, expedicao
+    - grupo, zona, inativo, difi_cobranca
+    - limitecredito, docs_bloqueados
+
+    Exemplo:
+        list_clientes(descricao="Silva")
+        list_clientes(contribuinte="123456789")
     """
     params: dict[str, str] = {}
     if descricao:
@@ -40,10 +51,22 @@ async def list_clientes(
 async def get_cliente(codigo: int) -> str:
     """Obter a ficha completa de um cliente pelo seu código numérico.
 
-    Inclui: nome, morada, NIF, contactos (telefone, email, fax),
-    condições comerciais (preço, descontos, prazo pagamento, expedição),
-    vendedor, moeda, limite de crédito, observações, dados pessoais,
-    faturação eletrónica, e flags operacionais.
+    Retorna (JSON) — todos os campos do cliente, incluindo:
+    - Identificação: codigo, descricao (nome), descricao2, contribuinte (NIF)
+    - Endereço: morada, morada2, codpostal, pais, latitude, longitude
+    - Contactos: telefone1..4, telemovel1..4, email1..4, fax, web
+    - Comercial: preco (tabela de preço), desct_art, prazo_pagamento,
+      expedicao, vendedor, vendedor_fixo, moeda
+    - Crédito: limitecredito, limite_vencimento, limite_emitido,
+      docs_bloqueados, difi_cobranca (0=Normal, 1=Difícil, 2=Incobrável)
+    - Classificação: grupo, zona, rota, area_negocio, idioma
+    - Fiscal: espaco_fiscal, sujeito_passivo, iva_isencao, retencao,
+      retencao_taxa, enviar_faturacao_eletronica, mail_faturacao_eletronica
+    - Pessoal: bi, bi_validade, seg_social, utente_saude, data_nascimento, sexo
+    - Flags: inativo, administracao_publica, ecovalor, resumo_faturas
+
+    Exemplo:
+        get_cliente(codigo=1)
     """
     data = await client.get_v1(f"/clientes/{codigo}")
     return json.dumps(data, ensure_ascii=False, default=str)
@@ -73,8 +96,19 @@ async def update_cliente(
     """Atualizar campos de um cliente existente.
 
     Apenas os campos fornecidos são alterados — os restantes mantêm-se.
-    Campos comuns: nome, morada, código postal, país, telefone, email,
-    NIF, prazo pagamento, expedição, vendedor, moeda, observações, inativo.
+    Usar get_cliente() primeiro para ver os valores atuais.
+
+    Retorna (JSON): cliente atualizado com todos os campos (mesma
+    estrutura de get_cliente), ou "Cliente atualizado com sucesso."
+
+    Exemplo — atualizar contacto:
+        update_cliente(codigo=1, email1="novo@email.pt", telemovel1="912345678")
+
+    Exemplo — alterar condições comerciais:
+        update_cliente(codigo=42, prazo_pagamento="PP30", vendedor=3)
+
+    Exemplo — desativar cliente:
+        update_cliente(codigo=99, inativo=True)
     """
     payload: dict = {}
     if descricao is not None:
@@ -116,7 +150,11 @@ async def update_cliente(
         return "Nenhum campo fornecido para atualizar."
 
     data = await client.put_v1(f"/clientes/{codigo}", json=payload)
-    return json.dumps(data, ensure_ascii=False, default=str) if data else "Cliente atualizado com sucesso."
+    return (
+        json.dumps(data, ensure_ascii=False, default=str)
+        if data
+        else "Cliente atualizado com sucesso."
+    )
 
 
 @mcp.tool()
@@ -147,21 +185,28 @@ async def create_cliente(
     - descricao: nome do cliente (ex: "João Silva, Lda.")
 
     Parâmetros opcionais mais comuns:
-    - codigo: código numérico (None = atribuição automática pelo servidor, default)
+    - codigo: código numérico (None = atribuição automática pelo servidor)
     - morada, morada2, codpostal, pais: endereço
     - contribuinte: NIF / número de contribuinte
     - telefone1, telemovel1, email1: contactos principais
     - espaco_fiscal: espaço fiscal (ex: "PT")
-    - prazo_pagamento: código do prazo de pagamento (ex: "PP01")
+    - prazo_pagamento: código do prazo de pagamento
+      → usar lookup_entity("prazos_pagamento") para ver códigos válidos
     - expedicao: código do método de expedição
     - vendedor: código do vendedor associado
+      → usar lookup_entity("vendedores") para ver códigos válidos
     - moeda: código da moeda (ex: "EUR")
     - zona, grupo: classificação do cliente
+      → usar lookup_entity("zonas"), lookup_entity("grupos_entidade")
     - obs: observações de texto livre
     - extras: campos adicionais em formato dict (para campos avançados
       não listados acima, ex: {"retencao": true, "retencao_taxa": 25.0})
 
-    Exemplo:
+    Retorna (JSON): cliente criado com todos os campos (mesma estrutura
+    de get_cliente), ou "Cliente criado com sucesso."
+    O servidor atribui o próximo código disponível se codigo=None.
+
+    Exemplo — cliente empresa:
         create_cliente(
             descricao="Padaria Central, Lda.",
             contribuinte="123456789",
@@ -171,6 +216,9 @@ async def create_cliente(
             email1="padaria@email.pt",
             moeda="EUR",
         )
+
+    Exemplo — cliente particular (mínimo):
+        create_cliente(descricao="Maria Santos")
     """
     payload: dict[str, Any] = {"descricao": descricao}
     if codigo is not None:
@@ -211,4 +259,8 @@ async def create_cliente(
         payload.update(extras)
 
     data = await client.post_v1("/clientes", json=payload)
-    return json.dumps(data, ensure_ascii=False, default=str) if data else "Cliente criado com sucesso."
+    return (
+        json.dumps(data, ensure_ascii=False, default=str)
+        if data
+        else "Cliente criado com sucesso."
+    )

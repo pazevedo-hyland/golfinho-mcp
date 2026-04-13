@@ -32,8 +32,9 @@ async def criar_producao(
     num produto composto (produto acabado). Ideal para manufatura, cozinha, montagem, etc.
 
     Parâmetros obrigatórios:
-    - codigo: código do tipo de documento de produção
-    - numero: número da folha de produção
+    - codigo: código do tipo de documento de produção (usar
+      lookup_entity("documentos") para ver tipos disponíveis)
+    - numero: número da folha de produção (int)
     - serie: série documental (ex: "2026")
     - ano: ano da produção (ex: 2026)
     - entidade_codigo: código do cliente/entidade associada
@@ -46,23 +47,28 @@ async def criar_producao(
     - moeda: código da moeda (default: "EUR")
     - estado_producao: estado inicial (código numérico)
 
-    Linhas — produto composto (o que se produz):
+    Produto composto (o que se produz) — ⚠ é um dict único, NÃO uma lista:
     - composto: dict com os dados do produto acabado:
-        - artigo: código do artigo produzido
-        - quantidade: quantidade produzida
-        - preco: custo unitário estimado
-        - armazem: armazém de destino
+        - artigo: código do artigo produzido (str)
+        - quantidade: quantidade produzida (float)
+        - preco: custo unitário estimado (float)
+        - armazem: armazém de destino (str)
         Opcionais: lote, tamanho, cor
 
-    Linhas — componentes (matérias-primas consumidas):
+    Componentes (matérias-primas consumidas):
     - componentes: lista de dicts, cada um com:
-        - artigo: código da matéria-prima
-        - quantidade: quantidade consumida
-        - preco: custo unitário
-        - armazem: armazém de origem
+        - artigo: código da matéria-prima (str)
+        - quantidade: quantidade consumida (float)
+        - preco: custo unitário (float)
+        - armazem: armazém de origem (str)
         Opcionais: lote, tamanho, cor
 
     - extras: dict com campos avançados não listados acima
+
+    Retorna (JSON):
+        {"doc_codigo": "PR", "doc_numero": 1, "doc_serie": "2026",
+         "doc_ano": 2026, "doc_entidade": 1}
+    ou mensagem de sucesso se a API não devolver corpo.
 
     Exemplo — produção de bolos:
         criar_producao(
@@ -112,4 +118,8 @@ async def criar_producao(
         payload.update(extras)
 
     data_resp = await client.post_old("/producaoNova", json=payload)
-    return json.dumps(data_resp, ensure_ascii=False, default=str) if data_resp else "Folha de produção criada com sucesso."
+    return (
+        json.dumps(data_resp, ensure_ascii=False, default=str)
+        if data_resp
+        else "Folha de produção criada com sucesso."
+    )
