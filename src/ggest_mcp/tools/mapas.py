@@ -7,6 +7,7 @@ from typing import Optional
 
 from ggest_mcp.http_client import client
 from ggest_mcp.app import mcp
+from ggest_mcp.pagination import paginate_response
 
 
 @mcp.tool()
@@ -23,6 +24,8 @@ async def mapa_vendas_gerais(
     vendas: bool = True,
     recibos: bool = True,
     contacorrente: bool = True,
+    pagina: int = 1,
+    itens_por_pagina: int = 50,
 ) -> str:
     """Relatório de vendas gerais — lista todos os documentos num período.
 
@@ -37,7 +40,12 @@ async def mapa_vendas_gerais(
     - lista_postos: postos específicos (ex: [1, 2])
     - validos/anulados/vendas/recibos/contacorrente: tipos a incluir
 
-    Devolve lista de documentos com tipo, número, cliente, totais, IVA, vendedor, etc.
+    Paginação (client-side, resultados podem ser muitos):
+    - pagina: número da página (default 1)
+    - itens_por_pagina: itens por página (default 50, max 200)
+
+    Devolve página de documentos com tipo, número, cliente, totais, IVA, vendedor, etc.
+    O campo _paginacao indica total_itens e total_paginas.
     """
     payload: dict = {
         "Da_data_hora": da_data_hora,
@@ -60,7 +68,7 @@ async def mapa_vendas_gerais(
         payload["lista_postos"] = lista_postos
 
     data = await client.post_old("/mapaVendasGerais", json=payload)
-    return json.dumps(data, ensure_ascii=False, default=str)
+    return paginate_response(data, pagina=pagina, itens_por_pagina=itens_por_pagina)
 
 
 @mcp.tool()
@@ -75,6 +83,8 @@ async def mapa_extrato_clientes(
     apenas_clientes_ativos: bool = True,
     documentos_procurar: int = 1,
     mostrar_saldo_anterior: bool = True,
+    pagina: int = 1,
+    itens_por_pagina: int = 50,
 ) -> str:
     """Extrato de conta corrente de clientes — movimentos de débito e crédito.
 
@@ -89,7 +99,12 @@ async def mapa_extrato_clientes(
     - documentos_procurar: 1=Todos, 2=Pendentes, 3=Pendentes até data fim
     - mostrar_saldo_anterior: incluir saldo anterior à data início
 
-    Devolve lista de movimentos com documento, data, débito, crédito, saldo.
+    Paginação (client-side, resultados podem ser muitos):
+    - pagina: número da página (default 1)
+    - itens_por_pagina: itens por página (default 50, max 200)
+
+    Devolve página de movimentos com documento, data, débito, crédito, saldo.
+    O campo _paginacao indica total_itens e total_paginas.
     """
     payload: dict = {
         "da_data": da_data,
@@ -113,7 +128,7 @@ async def mapa_extrato_clientes(
         payload["vendedor"] = vendedor
 
     data = await client.post_old("/mapaExtratoClientes", json=payload)
-    return json.dumps(data, ensure_ascii=False, default=str)
+    return paginate_response(data, pagina=pagina, itens_por_pagina=itens_por_pagina)
 
 
 @mcp.tool()
@@ -189,6 +204,8 @@ async def mapa_vendas_artigos(
     lista_series: Optional[list[str]] = None,
     lista_postos: Optional[list[int]] = None,
     incluir_iva: bool = True,
+    pagina: int = 1,
+    itens_por_pagina: int = 50,
 ) -> str:
     """Vendas de artigos — por grupo ou resumo.
 
@@ -199,6 +216,12 @@ async def mapa_vendas_artigos(
 
     Filtros opcionais variam por modo. Comuns: vendedor, marca, cliente, séries, postos.
     Modo "resumo" suporta também: grupo_codigo, familia_codigo, subfamilia_codigo.
+
+    Paginação (client-side, resultados podem ser muitos):
+    - pagina: número da página (default 1)
+    - itens_por_pagina: itens por página (default 50, max 200)
+
+    O campo _paginacao indica total_itens e total_paginas.
     """
     if modo == "grupo":
         payload: dict = {
@@ -248,7 +271,7 @@ async def mapa_vendas_artigos(
     else:
         return f"Modo '{modo}' inválido. Use 'grupo' ou 'resumo'."
 
-    return json.dumps(data, ensure_ascii=False, default=str)
+    return paginate_response(data, pagina=pagina, itens_por_pagina=itens_por_pagina)
 
 
 @mcp.tool()

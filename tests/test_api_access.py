@@ -1,7 +1,7 @@
 """Integration tests — verify which gGest API endpoints are accessible with current credentials.
 
 Run:  pytest tests/test_api_access.py -v
-Requires GGEST_* environment variables (reads .env automatically).
+Requires GGEST_* environment variables (reads .env automatically via conftest).
 """
 
 from __future__ import annotations
@@ -13,28 +13,8 @@ import httpx
 import pytest
 
 # ---------------------------------------------------------------------------
-# Helpers
+# Config (env vars loaded by conftest.py)
 # ---------------------------------------------------------------------------
-
-
-def _load_dotenv() -> None:
-    """Minimal .env loader — no extra dependency needed."""
-    env_path = os.path.join(os.path.dirname(__file__), os.pardir, ".env")
-    env_path = os.path.abspath(env_path)
-    if not os.path.isfile(env_path):
-        return
-    with open(env_path) as f:
-        for line in f:
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, _, value = line.partition("=")
-            key, value = key.strip(), value.strip()
-            if not os.environ.get(key):
-                os.environ[key] = value
-
-
-_load_dotenv()
 
 HOST = os.environ.get("GGEST_HOST", "golfinhosoftware.pcscloud.net")
 USERNAME = os.environ.get("GGEST_USERNAME", "")

@@ -21,7 +21,14 @@ class GGestClient:
         self._access_token: str | None = None
         self._refresh_token: str | None = None
         self._old_token: str | None = None
-        self._http = httpx.AsyncClient(timeout=60.0, verify=True)
+        self._http: httpx.AsyncClient | None = None
+
+    @property
+    def _client(self) -> httpx.AsyncClient:
+        """Lazily create the httpx client inside the running event loop."""
+        if self._http is None:
+            self._http = httpx.AsyncClient(timeout=60.0, verify=True)
+        return self._http
 
     # ── Token management ──────────────────────────────────────────────────
 
@@ -66,7 +73,7 @@ class GGestClient:
         _retried: bool = False,
     ) -> Any:
         """Execute a v1 API request with auto-refresh on 401."""
-        resp = await self._http.request(
+        resp = await self._client.request(
             method,
             url,
             headers=self._auth_headers_v1(),
@@ -104,7 +111,7 @@ class GGestClient:
         _retried: bool = False,
     ) -> Any:
         """Execute an old API request with re-login on 401."""
-        resp = await self._http.request(
+        resp = await self._client.request(
             method,
             url,
             headers=self._auth_headers_old(),
@@ -136,7 +143,7 @@ class GGestClient:
     async def _do_refresh(self) -> None:
         """Refresh the access token using the stored refresh token."""
         url = f"{get_settings().base_url_v1}/auth/refresh-token"
-        resp = await self._http.post(
+        resp = await self._client.post(
             url, json={"refresh_token": self._refresh_token}
         )
         if resp.status_code >= 400:
@@ -173,7 +180,7 @@ class GGestClient:
 
     async def post_raw(self, url: str, *, json: Any | None = None) -> Any:
         """POST to a full URL without auth headers (used for login)."""
-        resp = await self._http.post(url, json=json)
+        resp = await self._client.post(url, json=json)
         if resp.status_code >= 400:
             raise RuntimeError(
                 f"Request failed ({resp.status_code}): {resp.text[:300]}"
@@ -183,7 +190,9 @@ class GGestClient:
     # ── Lifecycle ─────────────────────────────────────────────────────────
 
     async def close(self) -> None:
-        await self._http.aclose()
+        if self._http is not None:
+            await self._http.aclose()
+            self._http = None
 
 
 # Singleton — shared across all tools

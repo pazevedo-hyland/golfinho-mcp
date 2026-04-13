@@ -11,6 +11,7 @@ from ggest_mcp.tools import lookup  # noqa: F401
 from ggest_mcp.tools import iva  # noqa: F401
 from ggest_mcp.tools import mapas  # noqa: F401
 from ggest_mcp.tools import sistema  # noqa: F401
+from ggest_mcp.tools import analytics  # noqa: F401
 
 logger = logging.getLogger(__name__)
 
