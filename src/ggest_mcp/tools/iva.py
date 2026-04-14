@@ -24,7 +24,7 @@ async def list_ivas(
     Retorna (JSON):
     - tipo="taxas": lista com {codigo, descricao, taxa, tipo, regime}
       O campo 'codigo' (int) é o valor a usar em cod_iva nas linhas de
-      gravar_documento e gravar_recibo.
+      criar_fatura, criar_orcamento, etc. e gravar_recibo.
     - tipo="isencoes": lista com {codigo, descricao, norma_legal}
     - tipo="regimes": lista com {codigo, descricao, deducao, bens_usados}
     - tipo="todos": {taxas_iva: [...], isencoes_iva: [...], regimes_iva: [...]}

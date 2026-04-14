@@ -133,7 +133,7 @@ async def assistencia_tecnica(
     - posto: código do posto
 
     Parâmetros opcionais:
-    - linhas: lista de artigos/serviços (estrutura igual a gravar_documento).
+    - linhas: lista de artigos/serviços (estrutura igual a criar_fatura).
       Cada linha: {"artigo": "...", "descricao": "...", "quantidade": N,
                    "preco": X.XX}
       Nota: data_mov é preenchido automaticamente — não é preciso enviar.

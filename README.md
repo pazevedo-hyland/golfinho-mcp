@@ -4,7 +4,7 @@ MCP server para o ERP gGest — acesso seguro à API REST do gGest via Claude ou
 
 ## Funcionalidades
 
-**27 tools** — 19 read-only, 6 analytics (read-only) e 8 write:
+**31 tools** — 19 read-only, 6 analytics (read-only) e 12 write:
 
 > **Legenda**: 🟢 read-only (sempre ativa) · 🔵 analytics/read-only · 🟠 write (requer `GGEST_READONLY=false`)
 
@@ -53,7 +53,11 @@ MCP server para o ERP gGest — acesso seguro à API REST do gGest via Claude ou
 ### Documentos Comerciais
 | Tool | Tipo | Descrição |
 |------|------|-----------|
-| `gravar_documento` | 🟠 write | Criar qualquer documento comercial: faturas, notas de crédito, orçamentos, pro formas, guias de transporte, faturas de compra |
+| `criar_fatura` | 🟠 write | Criar faturas de venda (FR, FT, FS) — a pronto ou a crédito |
+| `criar_orcamento` | 🟠 write | Criar orçamentos (OR) ou faturas pro forma (FP) |
+| `criar_nota_credito` | 🟠 write | Criar notas de crédito (NC) — anulação/correção de faturas |
+| `criar_guia_transporte` | 🟠 write | Criar guias de transporte (GT) — requer matrícula e moradas |
+| `criar_fatura_compra` | 🟠 write | Lançar faturas de compra (FC) de fornecedores |
 | `gravar_recibo` | 🟠 write | Criar recibos (pagamentos) — liquida documentos pendentes |
 
 ### Assistência Técnica & Produção
@@ -67,7 +71,7 @@ MCP server para o ERP gGest — acesso seguro à API REST do gGest via Claude ou
 |------|------|-----------|
 | `get_pendentes_recibo` | 🟢 read | Documentos pendentes de pagamento de um cliente |
 
-**Segurança**: sem deletes, todas as 8 tools de escrita (🟠) desativadas por defeito (`GGEST_READONLY=true`). Mudar para `false` para as ativar.
+**Segurança**: sem deletes, todas as 12 tools de escrita (🟠) desativadas por defeito (`GGEST_READONLY=true`). Mudar para `false` para as ativar.
 
 ## Cobertura de Casos de Uso
 
@@ -81,23 +85,23 @@ Mapeamento entre as necessidades reais dos utilizadores e as tools disponíveis:
 | Criar fornecedores | ❌ | API sem endpoint (ver [Lacuna #1](#1-fornecedores--credores)) |
 | Criar credores | ❌ | API sem endpoint (ver [Lacuna #1](#1-fornecedores--credores)) |
 | **Faturação e recibos** | | |
-| Faturas de venda a pronto | ✅ | `gravar_documento(codigo="FT", ...)` + `formas_pag` |
-| Faturas de venda a crédito | ✅ | `gravar_documento(codigo="FT", ...)` sem formas_pag |
+| Faturas de venda a pronto | ✅ | `criar_fatura(...)` + `formas_pag` |
+| Faturas de venda a crédito | ✅ | `criar_fatura(codigo="FT", ...)` sem formas_pag |
 | Recibos | ✅ | `get_pendentes_recibo` → `gravar_recibo` |
 | Criar avenças | ❌ | API sem endpoint (ver [Lacuna #2](#2-avenças-faturas-recorrentes)) |
 | Faturar avenças | ❌ | Idem |
 | **Compras e despesas** | | |
-| Lançar fatura de compra | ✅ | `gravar_documento(codigo="FC", ...)` |
+| Lançar fatura de compra | ✅ | `criar_fatura_compra(...)` |
 | Lançar despesas | ⚠️ | Depende do tipo de documento — verificar com `lookup_entity("documentos")` |
 | **Produção e serviços** | | |
 | Folhas de produção | ✅ | `criar_producao` |
 | Assistências técnicas | ✅ | `assistencia_tecnica` (pedido + intervenção + ordem de serviço) |
 | Empréstimos técnicos | ❌ | API sem endpoint (ver [Lacuna #3](#3-empréstimos-de-equipamento)) |
 | **Logística** | | |
-| Guias de transporte | ✅ | `gravar_documento(codigo="GT", matricula=..., ...)` |
+| Guias de transporte | ✅ | `criar_guia_transporte(matricula=..., ...)` |
 | **Documentos comerciais** | | |
-| Orçamentos | ✅ | `gravar_documento(codigo="OR", ...)` |
-| Faturas pro forma | ✅ | `gravar_documento(codigo="FP", ...)` |
+| Orçamentos | ✅ | `criar_orcamento(...)` |
+| Faturas pro forma | ✅ | `criar_orcamento(codigo="FP", ...)` |
 | **Comunicação com clientes** | | |
 | Enviar extrato de conta | ❌ | API sem endpoint (ver [Lacuna #4](#4-email--notificações)) |
 | Avisos de vencimento | ❌ | Idem |
@@ -190,9 +194,10 @@ Depois de ligar o MCP server ao teu cliente (VS Code, Claude Desktop, etc.), exp
 - "Compara o 1º trimestre de 2025 com o 1º trimestre de 2026"
 
 **Documentos Comerciais** (requer `GGEST_READONLY=false`)
-- "Cria uma fatura para o cliente 1 com 10 unidades do artigo CAFE-001 a 1.20€"
-- "Faz um orçamento para o cliente 42 com os artigos X, Y e Z"
-- "Cria uma guia de transporte para o cliente 5 com matrícula AA-00-BB"
+- "Cria uma fatura para o cliente 1 com 10 unidades do artigo CAFE-001 a 1.20€" → `criar_fatura`
+- "Faz um orçamento para o cliente 42 com os artigos X, Y e Z" → `criar_orcamento`
+- "Cria uma guia de transporte para o cliente 5 com matrícula AA-00-BB" → `criar_guia_transporte`
+- "Lança a fatura de compra nº 4521 do fornecedor 10" → `criar_fatura_compra`
 - "Emite um recibo para liquidar a fatura 100 do cliente 1"
 
 **Assistência Técnica** (requer `GGEST_READONLY=false`)

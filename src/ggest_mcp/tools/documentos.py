@@ -1,20 +1,48 @@
-"""Documentos tools — gravar documentos comerciais e recibos."""
+"""Documentos tools — gravar documentos comerciais e recibos.
+
+5 tools especializadas por tipo de documento + gravar_recibo.
+Todas chamam internamente POST /api/gravarDocumento via _gravar_documento().
+"""
 
 from __future__ import annotations
 
 import json
+from datetime import datetime
 from typing import Any, Optional
 
 from ggest_mcp.http_client import client
 from ggest_mcp.app import mcp
 
 
-@mcp.tool()
-async def gravar_documento(
+# ---------------------------------------------------------------------------
+# Helper privado (NÃO é tool MCP)
+# ---------------------------------------------------------------------------
+
+async def _gravar_documento(payload: dict[str, Any]) -> str:
+    """Envia payload para POST /api/gravarDocumento e devolve resultado JSON."""
+    # Auto-fill data_mov on lines if missing (API requires it)
+    if "linhas" in payload:
+        default_dt = payload.get("data_doc") or datetime.now().strftime(
+            "%Y-%m-%dT%H:%M:%S"
+        )
+        for linha in payload["linhas"]:
+            if "data_mov" not in linha:
+                linha["data_mov"] = default_dt
+
+    data = await client.post_old("/gravarDocumento", json=payload)
+    return (
+        json.dumps(data, ensure_ascii=False, default=str)
+        if data
+        else "Documento gravado com sucesso."
+    )
+
+
+def _build_payload(
     codigo: str,
     entidade_codigo: int,
     posto: int,
-    moeda: str = "EUR",
+    moeda: str,
+    *,
     serie: Optional[str] = None,
     data_doc: Optional[str] = None,
     data_venc: Optional[str] = None,
@@ -26,131 +54,199 @@ async def gravar_documento(
     descritivo: Optional[str] = None,
     linhas: Optional[list[dict[str, Any]]] = None,
     formas_pag: Optional[list[dict[str, Any]]] = None,
-    matricula: Optional[str] = None,
-    data_carga: Optional[str] = None,
-    morada_carga: Optional[str] = None,
-    data_descarga: Optional[str] = None,
-    morada_descarga: Optional[str] = None,
+    entidade_descricao: Optional[str] = None,
+    entidade_morada: Optional[str] = None,
+    entidade_codpostal: Optional[str] = None,
+    entidade_contribuinte: Optional[str] = None,
+    entidade_pais: Optional[str] = None,
+    extras: Optional[dict[str, Any]] = None,
+    **transport: Any,
+) -> dict[str, Any]:
+    """Constrói o payload comum a todos os tipos de documento."""
+    payload: dict[str, Any] = {
+        "codigo": codigo,
+        "entidade_codigo": entidade_codigo,
+        "moeda": moeda,
+        "posto": posto,
+    }
+    _optionals = {
+        "serie": serie,
+        "data_doc": data_doc,
+        "data_venc": data_venc,
+        "prazo_pagamento": prazo_pagamento,
+        "vendedor": vendedor,
+        "iva_inc": iva_inc,
+        "observacao": observacao,
+        "referencia": referencia,
+        "descritivo": descritivo,
+        "linhas": linhas,
+        "formas_pag": formas_pag,
+        "entidade_descricao": entidade_descricao,
+        "entidade_morada": entidade_morada,
+        "entidade_codpostal": entidade_codpostal,
+        "entidade_contribuinte": entidade_contribuinte,
+        "entidade_pais": entidade_pais,
+    }
+    for k, v in _optionals.items():
+        if v is not None:
+            payload[k] = v
+    for k, v in transport.items():
+        if v is not None:
+            payload[k] = v
+    if extras:
+        payload.update(extras)
+    return payload
+
+
+# ---------------------------------------------------------------------------
+# TOOL 1 — criar_fatura  (FR / FT / FS)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def criar_fatura(
+    entidade_codigo: int,
+    posto: int,
+    linhas: list[dict[str, Any]],
+    codigo: str = "FR",
+    moeda: str = "EUR",
+    serie: Optional[str] = None,
+    data_doc: Optional[str] = None,
+    data_venc: Optional[str] = None,
+    prazo_pagamento: Optional[str] = None,
+    vendedor: Optional[int] = None,
+    iva_inc: Optional[bool] = None,
+    observacao: Optional[str] = None,
+    referencia: Optional[str] = None,
+    descritivo: Optional[str] = None,
+    formas_pag: Optional[list[dict[str, Any]]] = None,
+    entidade_descricao: Optional[str] = None,
+    entidade_morada: Optional[str] = None,
+    entidade_codpostal: Optional[str] = None,
+    entidade_contribuinte: Optional[str] = None,
+    entidade_pais: Optional[str] = None,
     extras: Optional[dict[str, Any]] = None,
 ) -> str:
-    """Criar/gravar um documento comercial no gGest.
+    """Criar uma fatura de venda (FR, FT ou FS).
 
-    Esta é uma tool universal para todos os tipos de documentos:
-    faturas, notas de crédito, orçamentos, faturas pro forma,
-    guias de transporte, faturas de compra, etc. O tipo é determinado
-    pelo parâmetro 'codigo' (código do tipo de documento).
+    Tipos suportados (parâmetro 'codigo'):
+      "FR" = Fatura-Recibo (default) — venda a pronto, a mais simples
+      "FT" = Fatura — pode exigir dados de transporte conforme a série
+      "FS" = Fatura Simplificada — exige NIF válido no cliente
 
-    ╔══ WORKFLOW RECOMENDADO (antes de chamar esta tool) ══╗
-    ║ 1. lookup_entity("documentos") → tipos de doc válidos (FT, OR, GT…)  ║
-    ║ 2. lookup_entity("series")     → séries disponíveis (ex: "2026")     ║
-    ║ 3. list_ivas(tipo="taxas")     → códigos de IVA (campo cod_iva)      ║
-    ║ 4. lookup_entity("tipos_pagamento") → formas de pagamento (NUM, TB…) ║
-    ║ 5. get_artigo(codigo)          → confirmar código e preço do artigo  ║
-    ╚══════════════════════════════════════════════════════════════════════╝
+    ╔══ WORKFLOW ══╗
+    ║ 1. lookup_entity("series")          → série (ex: "2026")         ║
+    ║ 2. get_artigo(codigo)               → confirmar código e preço   ║
+    ║ 3. list_ivas(tipo="taxas")          → códigos de IVA (cod_iva)   ║
+    ║ 4. lookup_entity("tipos_pagamento") → formas pag (NUM, TRFB…)   ║
+    ╚══════════════════════════════════════════════════════════════════╝
 
     Parâmetros obrigatórios:
-    - codigo: código do tipo de documento. Exemplos comuns:
-        "FT" = Fatura  (pode exigir dados de transporte em certas séries)
-        "FR" = Fatura-Recibo  (fatura + pagamento imediato — mais simples)
-        "FS" = Fatura Simplificada  (exige NIF válido no cliente)
-        "NC" = Nota de Crédito
-        "OR" = Orçamento
-        "FP" = Fatura Pro Forma
-        "GT" = Guia de Transporte  (requer matricula + moradas)
-        "FC" = Fatura de Compra
-      (usar lookup_entity("documentos") para ver todos os tipos disponíveis)
-    - entidade_codigo: código numérico do cliente/fornecedor
-    - posto: código do posto/caixa (ex: 1)
-    - moeda: código da moeda (default: "EUR")
-
-    Parâmetros opcionais:
-    - serie: código da série documental (ex: "2026")
-    - data_doc: data do documento (formato "YYYY-MM-DD")
-    - data_venc: data de vencimento (formato "YYYY-MM-DD")
-    - prazo_pagamento: código do prazo de pagamento
-    - vendedor: código do vendedor
-    - iva_inc: true se os preços já incluem IVA
-    - observacao: texto livre de observações
-    - referencia: referência externa (ex: nº encomenda do cliente)
-    - descritivo: descritivo/nota no cabeçalho
-
-    Linhas do documento (lista de dicts):
-    - linhas: cada linha deve ter pelo menos:
+    - entidade_codigo: código numérico do cliente
+    - posto: posto/caixa (ex: 1)
+    - linhas: lista de artigos — cada linha deve ter:
         - artigo: código do artigo (str)
+        - descricao: descrição (str, mín. 2 caracteres — obrigatório!)
         - quantidade: quantidade (float)
         - preco: preço unitário (float)
-        - descricao: descrição da linha (str, mínimo 2 caracteres — obrigatório)
-      Opcionais por linha:
-        - cod_iva: código da taxa IVA (int — se omitido usa o default do artigo;
-          obter códigos válidos com list_ivas())
-        - armazem: código do armazém
-        - desc_lin_per1..5: descontos percentuais por linha (1 a 5)
-        - movstock: se movimenta stock (bool)
-      Nota: data_mov é preenchido automaticamente — não é preciso enviar.
+        - cod_iva: código IVA (int, opcional — default do artigo)
 
-    Formas de pagamento (lista de dicts) — obrigatório para vendas a pronto:
-    - formas_pag: cada forma deve ter:
-        - tipo: código do tipo de pagamento
-          (usar lookup_entity("tipos_pagamento") para ver códigos válidos;
-           exemplos comuns: "NUM" = numerário, "TRFB" = transferência,
-           "MB" = multibanco, "CC" = cartão crédito)
-        - valor: montante pago nessa forma (float)
-      Se omitido, o documento fica a crédito (conta corrente).
+    Formas de pagamento (obrigatório para FR e FS):
+    - formas_pag: lista de dicts, cada um com:
+        - forma_pag: código (ex: "NUM", "TRFB", "MB", "CC")
+        - valor: montante (float)
+      ⚠ O campo chama-se "forma_pag" (NÃO "tipo").
+      Se omitido → documento fica a crédito (conta corrente).
 
-    Campos de transporte (para guias GT):
-    - matricula: matrícula do veículo
-    - data_carga / morada_carga: data e local de carga
-    - data_descarga / morada_descarga: data e local de descarga
+    Dados da entidade (sobrepõem ficha do cliente — só se necessário):
+    - entidade_descricao: nome (NÃO "nome")
+    - entidade_morada: morada
+    - entidade_codpostal: código postal (NÃO "cod_postal")
+    - entidade_contribuinte: NIF (NÃO "contribuinte")
+    - entidade_pais: código do país
 
-    - extras: dict com campos avançados não listados acima
+    Exemplo — Fatura-Recibo a pronto:
+        criar_fatura(
+            entidade_codigo=1,
+            posto=1,
+            serie="2026",
+            linhas=[
+                {"artigo": "C13T03U24020",
+                 "descricao": "Tinteiro Epson Cyan 603",
+                 "quantidade": 1, "preco": 8.24, "cod_iva": 16},
+            ],
+            formas_pag=[{"forma_pag": "NUM", "valor": 10.14}],
+        )
 
-    Retorna (JSON):
-        {"doc_codigo": "FT", "doc_numero": 123, "doc_serie": "2026",
-         "doc_ano": 2026, "doc_entidade": 1}
-    ou mensagem de sucesso se a API não devolver corpo.
-
-    ⚠ Notas importantes:
-    - O campo 'descricao' em cada linha é frequentemente obrigatório (mín. 2
-      caracteres) — a API rejeita sem ele.
-    - Fatura Simplificada (FS) exige NIF válido configurado no cliente.
-    - Fatura (FT) pode exigir dados de transporte conforme a série — se só
-      precisa de uma venda simples, prefira FR (Fatura-Recibo).
-    - Mensagens de erro da API podem aparecer em francês (backend WinDev).
-
-    Exemplo — fatura a crédito:
-        gravar_documento(
+    Exemplo — Fatura a crédito (sem pagamento):
+        criar_fatura(
             codigo="FT",
             entidade_codigo=1,
             posto=1,
             linhas=[
                 {"artigo": "CAFE-001", "descricao": "Café Expresso",
                  "quantidade": 10, "preco": 1.20},
-                {"artigo": "BOLO-002", "descricao": "Bolo de Chocolate",
-                 "quantidade": 5, "preco": 2.50},
             ],
         )
+    """
+    payload = _build_payload(
+        codigo, entidade_codigo, posto, moeda,
+        serie=serie, data_doc=data_doc, data_venc=data_venc,
+        prazo_pagamento=prazo_pagamento, vendedor=vendedor, iva_inc=iva_inc,
+        observacao=observacao, referencia=referencia, descritivo=descritivo,
+        linhas=linhas, formas_pag=formas_pag,
+        entidade_descricao=entidade_descricao, entidade_morada=entidade_morada,
+        entidade_codpostal=entidade_codpostal,
+        entidade_contribuinte=entidade_contribuinte,
+        entidade_pais=entidade_pais, extras=extras,
+    )
+    return await _gravar_documento(payload)
 
-    Exemplo — fatura a pronto (com pagamento imediato em numerário):
-        gravar_documento(
-            codigo="FR",
-            entidade_codigo=1,
-            posto=1,
-            serie="2026",
-            linhas=[
-                {"artigo": "CAFE-001", "descricao": "Café Expresso",
-                 "quantidade": 10, "preco": 1.20, "cod_iva": 23},
-            ],
-            formas_pag=[
-                {"tipo": "NUM", "valor": 14.76},
-            ],
-        )
 
-    Exemplo — orçamento com desconto e prazo:
-        gravar_documento(
-            codigo="OR",
+# ---------------------------------------------------------------------------
+# TOOL 2 — criar_orcamento  (OR / FP)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def criar_orcamento(
+    entidade_codigo: int,
+    posto: int,
+    linhas: list[dict[str, Any]],
+    codigo: str = "OR",
+    moeda: str = "EUR",
+    serie: Optional[str] = None,
+    data_doc: Optional[str] = None,
+    data_venc: Optional[str] = None,
+    prazo_pagamento: Optional[str] = None,
+    vendedor: Optional[int] = None,
+    iva_inc: Optional[bool] = None,
+    observacao: Optional[str] = None,
+    referencia: Optional[str] = None,
+    descritivo: Optional[str] = None,
+    entidade_descricao: Optional[str] = None,
+    entidade_morada: Optional[str] = None,
+    entidade_codpostal: Optional[str] = None,
+    entidade_contribuinte: Optional[str] = None,
+    entidade_pais: Optional[str] = None,
+    extras: Optional[dict[str, Any]] = None,
+) -> str:
+    """Criar um orçamento (OR) ou fatura pro forma (FP).
+
+    Tipos suportados (parâmetro 'codigo'):
+      "OR" = Orçamento (default)
+      "FP" = Fatura Pro Forma
+
+    Estes documentos NÃO têm formas de pagamento — não geram movimento
+    financeiro. São documentos de proposta/previsão.
+
+    Parâmetros obrigatórios:
+    - entidade_codigo: código numérico do cliente
+    - posto: posto/caixa (ex: 1)
+    - linhas: lista de artigos (ver criar_fatura para estrutura)
+
+    Exemplo — Orçamento com desconto:
+        criar_orcamento(
             entidade_codigo=42,
             posto=1,
-            prazo_pagamento="PP01",
             vendedor=3,
             observacao="Válido por 30 dias",
             linhas=[
@@ -158,80 +254,221 @@ async def gravar_documento(
                  "quantidade": 1, "preco": 500.00, "desc_lin_per1": 10},
             ],
         )
+    """
+    payload = _build_payload(
+        codigo, entidade_codigo, posto, moeda,
+        serie=serie, data_doc=data_doc, data_venc=data_venc,
+        prazo_pagamento=prazo_pagamento, vendedor=vendedor, iva_inc=iva_inc,
+        observacao=observacao, referencia=referencia, descritivo=descritivo,
+        linhas=linhas,
+        entidade_descricao=entidade_descricao, entidade_morada=entidade_morada,
+        entidade_codpostal=entidade_codpostal,
+        entidade_contribuinte=entidade_contribuinte,
+        entidade_pais=entidade_pais, extras=extras,
+    )
+    return await _gravar_documento(payload)
 
-    Exemplo — guia de transporte:
-        gravar_documento(
-            codigo="GT",
+
+# ---------------------------------------------------------------------------
+# TOOL 3 — criar_nota_credito  (NC)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def criar_nota_credito(
+    entidade_codigo: int,
+    posto: int,
+    linhas: list[dict[str, Any]],
+    codigo: str = "NC",
+    moeda: str = "EUR",
+    serie: Optional[str] = None,
+    data_doc: Optional[str] = None,
+    vendedor: Optional[int] = None,
+    iva_inc: Optional[bool] = None,
+    observacao: Optional[str] = None,
+    referencia: Optional[str] = None,
+    descritivo: Optional[str] = None,
+    formas_pag: Optional[list[dict[str, Any]]] = None,
+    entidade_descricao: Optional[str] = None,
+    entidade_morada: Optional[str] = None,
+    entidade_codpostal: Optional[str] = None,
+    entidade_contribuinte: Optional[str] = None,
+    entidade_pais: Optional[str] = None,
+    extras: Optional[dict[str, Any]] = None,
+) -> str:
+    """Criar uma nota de crédito (NC).
+
+    Usado para anular ou corrigir parcialmente uma fatura anterior.
+    Indicar em 'referencia' ou 'observacao' qual a fatura de origem.
+
+    Parâmetros obrigatórios:
+    - entidade_codigo: código numérico do cliente
+    - posto: posto/caixa (ex: 1)
+    - linhas: artigos a creditar (ver criar_fatura para estrutura)
+
+    Exemplo — NC referente à fatura FT 100:
+        criar_nota_credito(
+            entidade_codigo=1,
+            posto=1,
+            serie="2026",
+            referencia="Ref. FT nº 100",
+            observacao="Devolução de artigo defeituoso",
+            linhas=[
+                {"artigo": "C13T03U24020",
+                 "descricao": "Tinteiro Epson Cyan 603",
+                 "quantidade": 1, "preco": 8.24, "cod_iva": 16},
+            ],
+        )
+    """
+    payload = _build_payload(
+        codigo, entidade_codigo, posto, moeda,
+        serie=serie, data_doc=data_doc,
+        vendedor=vendedor, iva_inc=iva_inc,
+        observacao=observacao, referencia=referencia, descritivo=descritivo,
+        linhas=linhas, formas_pag=formas_pag,
+        entidade_descricao=entidade_descricao, entidade_morada=entidade_morada,
+        entidade_codpostal=entidade_codpostal,
+        entidade_contribuinte=entidade_contribuinte,
+        entidade_pais=entidade_pais, extras=extras,
+    )
+    return await _gravar_documento(payload)
+
+
+# ---------------------------------------------------------------------------
+# TOOL 4 — criar_guia_transporte  (GT)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def criar_guia_transporte(
+    entidade_codigo: int,
+    posto: int,
+    linhas: list[dict[str, Any]],
+    matricula: str,
+    morada_carga: str,
+    morada_descarga: str,
+    codigo: str = "GT",
+    moeda: str = "EUR",
+    serie: Optional[str] = None,
+    data_doc: Optional[str] = None,
+    data_carga: Optional[str] = None,
+    data_descarga: Optional[str] = None,
+    vendedor: Optional[int] = None,
+    observacao: Optional[str] = None,
+    referencia: Optional[str] = None,
+    entidade_descricao: Optional[str] = None,
+    entidade_morada: Optional[str] = None,
+    entidade_codpostal: Optional[str] = None,
+    entidade_contribuinte: Optional[str] = None,
+    entidade_pais: Optional[str] = None,
+    extras: Optional[dict[str, Any]] = None,
+) -> str:
+    """Criar uma guia de transporte (GT).
+
+    Documento obrigatório para acompanhar mercadorias em trânsito.
+    Requer matrícula e moradas de carga/descarga.
+
+    Parâmetros obrigatórios:
+    - entidade_codigo: código numérico do cliente
+    - posto: posto/caixa (ex: 1)
+    - linhas: artigos transportados (ver criar_fatura para estrutura)
+    - matricula: matrícula do veículo (ex: "AA-00-BB")
+    - morada_carga: local de carga (ex: "Rua do Armazém, 1, Lisboa")
+    - morada_descarga: local de descarga
+
+    Opcionais:
+    - data_carga / data_descarga: datas (formato "YYYY-MM-DD")
+
+    Exemplo:
+        criar_guia_transporte(
             entidade_codigo=5,
             posto=1,
+            serie="2026",
             matricula="AA-00-BB",
-            data_carga="2026-04-15",
             morada_carga="Rua do Armazém, 1, Lisboa",
-            data_descarga="2026-04-15",
             morada_descarga="Av. do Cliente, 20, Porto",
+            data_carga="2026-04-15",
+            data_descarga="2026-04-15",
             linhas=[
                 {"artigo": "PROD-100", "descricao": "Widget Industrial",
                  "quantidade": 50, "preco": 10.00},
             ],
         )
     """
-    payload: dict[str, Any] = {
-        "codigo": codigo,
-        "entidade_codigo": entidade_codigo,
-        "moeda": moeda,
-        "posto": posto,
-    }
-    if serie is not None:
-        payload["serie"] = serie
-    if data_doc is not None:
-        payload["data_doc"] = data_doc
-    if data_venc is not None:
-        payload["data_venc"] = data_venc
-    if prazo_pagamento is not None:
-        payload["prazo_pagamento"] = prazo_pagamento
-    if vendedor is not None:
-        payload["vendedor"] = vendedor
-    if iva_inc is not None:
-        payload["iva_inc"] = iva_inc
-    if observacao is not None:
-        payload["observacao"] = observacao
-    if referencia is not None:
-        payload["referencia"] = referencia
-    if descritivo is not None:
-        payload["descritivo"] = descritivo
-    if linhas is not None:
-        # Auto-fill data_mov on lines if missing (API requires it)
-        from datetime import datetime
-
-        default_dt = data_doc or datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-        for linha in linhas:
-            if "data_mov" not in linha:
-                linha["data_mov"] = default_dt
-        payload["linhas"] = linhas
-    if formas_pag is not None:
-        payload["formas_pag"] = formas_pag
-
-    # Transport fields (guias de transporte)
-    if matricula is not None:
-        payload["matricula"] = matricula
-    if data_carga is not None:
-        payload["data_carga"] = data_carga
-    if morada_carga is not None:
-        payload["morada_carga"] = morada_carga
-    if data_descarga is not None:
-        payload["data_descarga"] = data_descarga
-    if morada_descarga is not None:
-        payload["morada_descarga"] = morada_descarga
-
-    if extras:
-        payload.update(extras)
-
-    data = await client.post_old("/gravarDocumento", json=payload)
-    return (
-        json.dumps(data, ensure_ascii=False, default=str)
-        if data
-        else "Documento gravado com sucesso."
+    payload = _build_payload(
+        codigo, entidade_codigo, posto, moeda,
+        serie=serie, data_doc=data_doc,
+        vendedor=vendedor, observacao=observacao, referencia=referencia,
+        linhas=linhas,
+        entidade_descricao=entidade_descricao, entidade_morada=entidade_morada,
+        entidade_codpostal=entidade_codpostal,
+        entidade_contribuinte=entidade_contribuinte,
+        entidade_pais=entidade_pais, extras=extras,
+        matricula=matricula, data_carga=data_carga,
+        morada_carga=morada_carga, data_descarga=data_descarga,
+        morada_descarga=morada_descarga,
     )
+    return await _gravar_documento(payload)
+
+
+# ---------------------------------------------------------------------------
+# TOOL 5 — criar_fatura_compra  (FC)
+# ---------------------------------------------------------------------------
+
+@mcp.tool()
+async def criar_fatura_compra(
+    entidade_codigo: int,
+    posto: int,
+    linhas: list[dict[str, Any]],
+    codigo: str = "FC",
+    moeda: str = "EUR",
+    serie: Optional[str] = None,
+    data_doc: Optional[str] = None,
+    data_venc: Optional[str] = None,
+    prazo_pagamento: Optional[str] = None,
+    iva_inc: Optional[bool] = None,
+    observacao: Optional[str] = None,
+    referencia: Optional[str] = None,
+    descritivo: Optional[str] = None,
+    formas_pag: Optional[list[dict[str, Any]]] = None,
+    entidade_descricao: Optional[str] = None,
+    entidade_morada: Optional[str] = None,
+    entidade_codpostal: Optional[str] = None,
+    entidade_contribuinte: Optional[str] = None,
+    entidade_pais: Optional[str] = None,
+    extras: Optional[dict[str, Any]] = None,
+) -> str:
+    """Lançar uma fatura de compra (FC) de um fornecedor.
+
+    Regista no sistema uma fatura recebida de um fornecedor.
+
+    Parâmetros obrigatórios:
+    - entidade_codigo: código numérico do fornecedor
+    - posto: posto/caixa (ex: 1)
+    - linhas: artigos comprados (ver criar_fatura para estrutura)
+
+    Exemplo:
+        criar_fatura_compra(
+            entidade_codigo=10,
+            posto=1,
+            serie="2026",
+            referencia="Fatura fornecedor nº 4521",
+            linhas=[
+                {"artigo": "MAT-001", "descricao": "Matéria Prima X",
+                 "quantidade": 100, "preco": 2.50, "cod_iva": 23},
+            ],
+        )
+    """
+    payload = _build_payload(
+        codigo, entidade_codigo, posto, moeda,
+        serie=serie, data_doc=data_doc, data_venc=data_venc,
+        prazo_pagamento=prazo_pagamento, iva_inc=iva_inc,
+        observacao=observacao, referencia=referencia, descritivo=descritivo,
+        linhas=linhas, formas_pag=formas_pag,
+        entidade_descricao=entidade_descricao, entidade_morada=entidade_morada,
+        entidade_codpostal=entidade_codpostal,
+        entidade_contribuinte=entidade_contribuinte,
+        entidade_pais=entidade_pais, extras=extras,
+    )
+    return await _gravar_documento(payload)
 
 
 @mcp.tool()
@@ -288,11 +525,12 @@ async def gravar_recibo(
 
     Formas de pagamento (lista de dicts):
     - formas_pag: cada forma deve ter:
-        - tipo: código do tipo de pagamento
+        - forma_pag: código do tipo de pagamento
           (usar lookup_entity("tipos_pagamento") para ver códigos válidos;
            exemplos: "NUM" = numerário, "TRFB" = transferência,
            "MB" = multibanco, "CC" = cartão crédito)
         - valor: montante pago nessa forma (float)
+      ⚠ O campo chama-se "forma_pag" (NÃO "tipo") — a API ignora "tipo".
       A soma dos valores deve igualar a soma dos valor_liquidar.
 
     - extras: dict com campos avançados não listados acima
@@ -317,7 +555,7 @@ async def gravar_recibo(
                  "valor_liquidar": 150.00},
             ],
             formas_pag=[
-                {"tipo": "TRFB", "valor": 150.00},
+                {"forma_pag": "TRFB", "valor": 150.00},
             ],
         )
     """
