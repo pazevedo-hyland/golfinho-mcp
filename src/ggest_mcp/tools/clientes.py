@@ -160,7 +160,6 @@ async def update_cliente(
 @mcp.tool()
 async def create_cliente(
     descricao: str,
-    codigo: Optional[int] = None,
     morada: Optional[str] = None,
     morada2: Optional[str] = None,
     codpostal: Optional[str] = None,
@@ -181,11 +180,13 @@ async def create_cliente(
 ) -> str:
     """Criar um novo cliente no gGest.
 
+    Usa a API antiga (/api/criarCliente) que não sofre do bug int64→int32
+    do endpoint v1.  O servidor atribui automaticamente o próximo código.
+
     Parâmetros obrigatórios:
     - descricao: nome do cliente (ex: "João Silva, Lda.")
 
     Parâmetros opcionais mais comuns:
-    - codigo: código numérico (None = atribuição automática pelo servidor)
     - morada, morada2, codpostal, pais: endereço
     - contribuinte: NIF / número de contribuinte
     - telefone1, telemovel1, email1: contactos principais
@@ -202,9 +203,8 @@ async def create_cliente(
     - extras: campos adicionais em formato dict (para campos avançados
       não listados acima, ex: {"retencao": true, "retencao_taxa": 25.0})
 
-    Retorna (JSON): cliente criado com todos os campos (mesma estrutura
-    de get_cliente), ou "Cliente criado com sucesso."
-    O servidor atribui o próximo código disponível se codigo=None.
+    Retorna (JSON): cliente criado com código atribuído pelo servidor
+    (formato ListaClientes — array "dados" com o cliente criado).
 
     Exemplo — cliente empresa:
         create_cliente(
@@ -220,9 +220,9 @@ async def create_cliente(
     Exemplo — cliente particular (mínimo):
         create_cliente(descricao="Maria Santos")
     """
+    # Use old API /criarCliente — the v1 endpoint has a WinDev int64→int32
+    # bug in ExecutarValidacoes that crashes with 500.
     payload: dict[str, Any] = {"descricao": descricao}
-    if codigo is not None:
-        payload["codigo"] = codigo
     if morada is not None:
         payload["morada"] = morada
     if morada2 is not None:
@@ -258,7 +258,7 @@ async def create_cliente(
     if extras:
         payload.update(extras)
 
-    data = await client.post_v1("/clientes", json=payload)
+    data = await client.post_old("/criarCliente", json=payload)
     return (
         json.dumps(data, ensure_ascii=False, default=str)
         if data
