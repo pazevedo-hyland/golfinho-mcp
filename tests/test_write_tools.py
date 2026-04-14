@@ -88,8 +88,8 @@ class TestCreateCliente:
             data = _parse(result)
             assert "Erro" not in str(data) and "error" not in str(data).lower()
         except httpx.HTTPStatusError as e:
-            # Server-side WinDev int8/int type bug — known issue
-            assert e.response.status_code in (409, 500), f"Unexpected error: {e}"
+            # 409 = already exists; 400 = business validation — both ok. 500 = server bug.
+            assert e.response.status_code != 500, f"Server crash: {e}"
 
     async def test_create_cliente_with_details(self) -> None:
         from ggest_mcp.tools.clientes import create_cliente
@@ -106,7 +106,7 @@ class TestCreateCliente:
             data = _parse(result)
             assert "Erro" not in str(data) and "error" not in str(data).lower()
         except httpx.HTTPStatusError as e:
-            assert e.response.status_code in (409, 500), f"Unexpected error: {e}"
+            assert e.response.status_code != 500, f"Server crash: {e}"
 
 
 # ---------------------------------------------------------------------------
@@ -115,14 +115,13 @@ class TestCreateCliente:
 
 
 @_skip_write
-class TestGravarDocumento:
-    async def test_gravar_fatura_simples(self) -> None:
+class TestCriarFatura:
+    async def test_criar_fatura_simples(self) -> None:
         """Create an invoice-receipt (FR) — paid on the spot."""
-        from ggest_mcp.tools.documentos import gravar_documento
+        from ggest_mcp.tools.documentos import criar_fatura
 
         try:
-            result = await gravar_documento(
-                codigo="FR",
+            result = await criar_fatura(
                 entidade_codigo=1,
                 posto=1,
                 serie="2026",
@@ -141,12 +140,12 @@ class TestGravarDocumento:
             # Demo DB may require NIF or other config — accept 400, reject 500
             assert e.response.status_code != 500, f"Server crash: {e}"
 
-    async def test_gravar_fatura_simplificada(self) -> None:
+    async def test_criar_fatura_simplificada(self) -> None:
         """Create a simplified invoice (FS) — requires payment and NIF."""
-        from ggest_mcp.tools.documentos import gravar_documento
+        from ggest_mcp.tools.documentos import criar_fatura
 
         try:
-            result = await gravar_documento(
+            result = await criar_fatura(
                 codigo="FS",
                 entidade_codigo=1,
                 posto=1,
@@ -165,6 +164,106 @@ class TestGravarDocumento:
             assert "Erro" not in str(data) and "error" not in str(data).lower()
         except httpx.HTTPStatusError as e:
             # FS may require NIF on the client — accept 400, reject 500
+            assert e.response.status_code != 500, f"Server crash: {e}"
+
+
+@_skip_write
+class TestCriarOrcamento:
+    async def test_criar_orcamento_basico(self) -> None:
+        """Create a quotation (OR) — no payment methods needed."""
+        from ggest_mcp.tools.documentos import criar_orcamento
+
+        try:
+            result = await criar_orcamento(
+                entidade_codigo=1,
+                posto=1,
+                serie="2026",
+                observacao="Orçamento teste MCP",
+                linhas=[
+                    {"artigo": "0000015", "quantidade": 1, "preco": 10.00,
+                     "descricao": "Extensao eletrica de 6 tomadas"},
+                ],
+            )
+            data = _parse(result)
+            _assert_no_crash(result)
+            assert "Erro" not in str(data) and "error" not in str(data).lower()
+        except httpx.HTTPStatusError as e:
+            assert e.response.status_code != 500, f"Server crash: {e}"
+
+
+@_skip_write
+class TestCriarNotaCredito:
+    async def test_criar_nota_credito_basica(self) -> None:
+        """Create a credit note (NC)."""
+        from ggest_mcp.tools.documentos import criar_nota_credito
+
+        try:
+            result = await criar_nota_credito(
+                entidade_codigo=1,
+                posto=1,
+                serie="2026",
+                referencia="Ref. FT teste MCP",
+                linhas=[
+                    {"artigo": "0000015", "quantidade": 1, "preco": 10.00,
+                     "descricao": "Extensao eletrica de 6 tomadas"},
+                ],
+            )
+            data = _parse(result)
+            _assert_no_crash(result)
+            assert "Erro" not in str(data) and "error" not in str(data).lower()
+        except httpx.HTTPStatusError as e:
+            assert e.response.status_code != 500, f"Server crash: {e}"
+
+
+@_skip_write
+class TestCriarGuiaTransporte:
+    async def test_criar_guia_basica(self) -> None:
+        """Create a transport guide (GT) — requires matricula + addresses."""
+        from ggest_mcp.tools.documentos import criar_guia_transporte
+
+        try:
+            result = await criar_guia_transporte(
+                entidade_codigo=1,
+                posto=1,
+                serie="2026",
+                matricula="AA-00-BB",
+                morada_carga="Rua do Armazém, 1, Lisboa",
+                morada_descarga="Av. do Cliente, 20, Porto",
+                data_carga="2026-04-15",
+                data_descarga="2026-04-15",
+                linhas=[
+                    {"artigo": "0000015", "quantidade": 5, "preco": 10.00,
+                     "descricao": "Extensao eletrica de 6 tomadas"},
+                ],
+            )
+            data = _parse(result)
+            _assert_no_crash(result)
+            assert "Erro" not in str(data) and "error" not in str(data).lower()
+        except httpx.HTTPStatusError as e:
+            assert e.response.status_code != 500, f"Server crash: {e}"
+
+
+@_skip_write
+class TestCriarFaturaCompra:
+    async def test_criar_fatura_compra_basica(self) -> None:
+        """Create a purchase invoice (FC)."""
+        from ggest_mcp.tools.documentos import criar_fatura_compra
+
+        try:
+            result = await criar_fatura_compra(
+                entidade_codigo=1,
+                posto=1,
+                serie="2026",
+                referencia="Fatura fornecedor teste MCP",
+                linhas=[
+                    {"artigo": "0000015", "quantidade": 10, "preco": 7.50,
+                     "descricao": "Extensao eletrica de 6 tomadas"},
+                ],
+            )
+            data = _parse(result)
+            _assert_no_crash(result)
+            assert "Erro" not in str(data) and "error" not in str(data).lower()
+        except httpx.HTTPStatusError as e:
             assert e.response.status_code != 500, f"Server crash: {e}"
 
 
